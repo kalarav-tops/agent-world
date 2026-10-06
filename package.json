@@ -1,0 +1,58 @@
+{
+  "name": "agent-world",
+  "version": "0.1.0",
+  "description": "A local, read-only, zero-token 3D world of every Claude Code agent working on this machine.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kalarav-tops/agent-world.git"
+  },
+  "homepage": "https://github.com/kalarav-tops/agent-world#readme",
+  "bugs": {
+    "url": "https://github.com/kalarav-tops/agent-world/issues"
+  },
+  "type": "module",
+  "bin": {
+    "agent-world": "dist/server/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "start": "node dist/server/cli.js",
+    "dev:server": "tsx watch src/server/cli.ts --port 4317 --dev-origin http://localhost:5173",
+    "dev:web": "vite",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "@playwright/test": "^1.63.0",
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.1",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-v8": "^5.0.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.186.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
+  }
+}

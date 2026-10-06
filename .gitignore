@@ -1,0 +1,19 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Test and coverage output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Logs, local environment and OS files
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
