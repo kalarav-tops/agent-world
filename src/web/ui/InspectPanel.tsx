@@ -8,6 +8,9 @@ import type { ControlAccess } from '../state/control';
 import { agentCount, preview, roleLabel, statusLabel, timeAgo } from './format';
 import { effortLabel, modelLabel } from '../../shared/models';
 import { Icon } from './icons';
+import { RequestForm } from './RequestForm';
+import { ReplyBox } from './ReplyBox';
+import { requestsFor, type RequestPlace } from '../state/requests';
 
 /** What the panel shows. */
 export type PanelView = { kind: 'lab' } | { kind: 'changes'; changeIndex: number | null } | { kind: 'scientist'; scientistId: string };
@@ -23,6 +26,8 @@ interface InspectPanelProps {
   access: ControlAccess;
   onView: (view: PanelView) => void;
   onClose: () => void;
+  places: RequestPlace[];
+  onReadConversation: (sessionId: string) => void;
 }
 
 /**
@@ -74,10 +79,19 @@ export function InspectPanel(props: InspectPanelProps): ReactElement {
  * @param props - panel props
  * @returns view
  */
-function LabView({ session, lab, detail, now, onView, access }: InspectPanelProps): ReactElement {
+function LabView({ session, lab, detail, now, onView, access, places, onReadConversation }: InspectPanelProps): ReactElement {
   const prompt = detail?.prompt ?? lab.prompt;
+  const waitingHere = requestsFor(places, session.sessionId, lab.id, null);
   return (
     <>
+      {waitingHere.length > 0 && (
+        <section className="section section--waiting">
+          <h3 className="section__title">Waiting on you</h3>
+          {waitingHere.map((request) => (
+            <RequestForm key={request.id} access={access} request={request} sessionName={session.title || session.project} now={now} />
+          ))}
+        </section>
+      )}
       <h2 className="panel__title">Lab {lab.index}</h2>
       <dl className="facts">
         <dt>Session</dt>
@@ -122,6 +136,19 @@ function LabView({ session, lab, detail, now, onView, access }: InspectPanelProp
           <p className="muted">No files changed in this lab.</p>
         )}
       </section>
+      <section className="section">
+        <h3 className="section__title">Conversation</h3>
+        <button type="button" className="row row--link" onClick={() => onReadConversation(session.sessionId)}>
+          <span className="row__main">Read conversation</span>
+          <span className="row__sub">Every prompt and reply in this session, as chat</span>
+          <Icon name="chevron" className="row__chevron" />
+        </button>
+      </section>
+      {access.enabled && (
+        <section className="section">
+          <ReplyBox access={access} sessionId={session.sessionId} />
+        </section>
+      )}
     </>
   );
 }
@@ -162,7 +189,7 @@ function ChangesView({ lab, detail, onView, changeIndex }: InspectPanelProps & {
  * @param props - panel props plus the scientist id
  * @returns view
  */
-function ScientistView({ session, lab, detail, now, scientistId, access }: InspectPanelProps & { scientistId: string }): ReactElement {
+function ScientistView({ session, lab, detail, now, scientistId, access, places }: InspectPanelProps & { scientistId: string }): ReactElement {
   const summary = lab.scientists.find((scientist) => scientist.id === scientistId);
   const full: Scientist | undefined = detail?.scientists[scientistId];
   if (!summary) return <p className="muted">This agent has left the lab.</p>;
@@ -170,6 +197,9 @@ function ScientistView({ session, lab, detail, now, scientistId, access }: Inspe
   return (
     <>
       <h2 className="panel__title">{roleLabel(summary.role)}</h2>
+      {requestsFor(places, session.sessionId, lab.id, scientistId).map((request) => (
+        <RequestForm key={request.id} access={access} request={request} sessionName={session.title || session.project} now={now} />
+      ))}
       {summary.description && <p className="muted">{summary.description}</p>}
       <p className="status-line">
         <span className="dot" style={{ background: STATUS_COLORS[summary.status] }} />

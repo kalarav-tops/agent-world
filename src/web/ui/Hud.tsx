@@ -3,6 +3,7 @@ import type { SessionSummary, WorldSummary } from '../../shared/types';
 import { isWaiting } from '../scene/layout';
 import { clientLabel, preview } from './format';
 import { Icon } from './icons';
+import type { RequestPlace } from '../state/requests';
 
 /** Props for the heads-up display. */
 interface HudProps {
@@ -13,7 +14,8 @@ interface HudProps {
   onFocusContinent: (sessionId: string) => void;
   onOverview: () => void;
   onCommand: () => void;
-  waitingOnYou: number;
+  waiting: RequestPlace[];
+  onShowWaiting: () => void;
 }
 
 /** World-level counts shown in the top bar. */
@@ -49,7 +51,7 @@ export function worldStats(world: WorldSummary, now: number): WorldStats {
  * @param props - world, connection and handlers
  * @returns the HUD
  */
-export function Hud({ world, connected, now, focusedSessionId, onFocusContinent, onOverview, onCommand, waitingOnYou }: HudProps): ReactElement {
+export function Hud({ world, connected, now, focusedSessionId, onFocusContinent, onOverview, onCommand, waiting, onShowWaiting }: HudProps): ReactElement {
   const stats = world ? worldStats(world, now) : null;
   return (
     <>
@@ -66,13 +68,13 @@ export function Hud({ world, connected, now, focusedSessionId, onFocusContinent,
             <Metric value={stats.edits} noun="edit" />
           </ul>
         )}
-        {stats && (stats.asking > 0 || stats.waiting > 0) && (
+        {stats && (waiting.length > 0 || stats.waiting > 0) && (
           <div className="hud__alerts">
-            {stats.asking > 0 && (
-              <span className="hud__chip hud__chip--asking">
+            {waiting.length > 0 && (
+              <button type="button" className="hud__chip hud__chip--asking" onClick={onShowWaiting}>
                 <span className="status-dot status-dot--asking" aria-hidden="true" />
-                {stats.asking} asking you
-              </span>
+                {waiting.length} waiting
+              </button>
             )}
             {stats.waiting > 0 && (
               <span className="hud__chip hud__stuck" title="A tool call has been pending over 20 seconds: a permission prompt or a long command">
@@ -89,7 +91,6 @@ export function Hud({ world, connected, now, focusedSessionId, onFocusContinent,
         <button type="button" className="hud__command" onClick={onCommand}>
           <Icon name="command" />
           Command centre
-          {waitingOnYou > 0 && <span className="hud__badge">{waitingOnYou}</span>}
         </button>
       </header>
       {world && world.sessions.length > 0 && (

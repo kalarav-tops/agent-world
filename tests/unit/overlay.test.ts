@@ -1,12 +1,13 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { LabSummary, ScientistSummary, SessionSummary, WorldSummary } from '../../src/shared/types';
+import type { LabSummary, PendingRequest, ScientistSummary, SessionSummary, WorldSummary } from '../../src/shared/types';
 import { ICONS, Icon, type IconName } from '../../src/web/ui/icons';
 import { Hud } from '../../src/web/ui/Hud';
 import { LabTag } from '../../src/web/ui/LabTag';
 import { InspectPanel } from '../../src/web/ui/InspectPanel';
 import { ViewControls } from '../../src/web/ui/ViewControls';
+import { placeRequests } from '../../src/web/state/requests';
 
 const NOW = Date.parse('2026-10-08T10:01:02Z');
 
@@ -54,7 +55,8 @@ const hud = (labs: LabSummary[]): string =>
       onFocusContinent: () => undefined,
       onOverview: () => undefined,
       onCommand: () => undefined,
-      waitingOnYou: 0,
+      waiting: [],
+      onShowWaiting: () => undefined,
     }),
   );
 
@@ -128,6 +130,8 @@ describe('InspectPanel', () => {
         access: { enabled: false },
         onView: () => undefined,
         onClose: () => undefined,
+        places: [],
+        onReadConversation: () => undefined,
       }),
     );
   };
@@ -156,5 +160,39 @@ describe('ViewControls', () => {
     for (const name of ['Zoom in (+)', 'Zoom out (-)', 'Turn left (q)', 'Turn right (e)', 'Tilt up (w)', 'Tilt down (s)', 'Face north (r)']) {
       expect(markup).toContain(`aria-label="${name}"`);
     }
+  });
+});
+
+const askReq = { id: 'q1', kind: 'question', sessionId: 's1', createdAt: '', expiresAt: '2026-10-08T10:03:00Z', questions: [{ question: 'Which colour?', header: 'Colour', multiSelect: false, options: [{ label: 'Blue', description: '' }] }] } as PendingRequest;
+
+describe('answering in place', () => {
+  const panelWith = (view: Parameters<typeof InspectPanel>[0]['view'], scientists: ScientistSummary[]): string => {
+    const labs = [lab({ scientists })];
+    const places = placeRequests([askReq], [session(labs)]);
+    return renderToStaticMarkup(createElement(InspectPanel, { session: session(labs), lab: labs[0]!, detail: null, view, now: NOW, replayBar: null, access: { enabled: true }, places, onView: () => undefined, onClose: () => undefined, onReadConversation: () => undefined }));
+  };
+
+  it('shows the question at the top of the asking agent\'s panel', () => {
+    const markup = panelWith({ kind: 'scientist', scientistId: 'main' }, [scientist({ status: 'asking', current: { tool: 'AskUserQuestion', summary: '', since: '2026-10-08T10:01:00Z', toolUseId: 't9' } })]);
+    expect(markup).toContain('Which colour?');
+    expect(markup).toContain('Send answer');
+  });
+
+  it('shows an unplaced request in the lab\'s Waiting on you section', () => {
+    const markup = panelWith({ kind: 'lab' }, [scientist(), scientist({ id: 'b' })]);
+    expect(markup).toContain('Waiting on you');
+    expect(markup).toContain('Which colour?');
+  });
+
+  it('offers a reply box and a conversation link in the lab view when control is on', () => {
+    const markup = panelWith({ kind: 'lab' }, [scientist()]);
+    expect(markup).toContain('Reply to this session');
+    expect(markup).toContain('Read conversation');
+  });
+
+  it('shows a waiting chip in the top bar that names the count', () => {
+    const labs = [lab()];
+    const markup = renderToStaticMarkup(createElement(Hud, { world: world(labs), connected: true, now: NOW, focusedSessionId: null, onFocusContinent: () => undefined, onOverview: () => undefined, onCommand: () => undefined, waiting: placeRequests([askReq], [session(labs)]), onShowWaiting: () => undefined }));
+    expect(markup).toMatch(/<button[^>]*class="hud__chip hud__chip--asking"[^>]*>.*1 waiting/);
   });
 });

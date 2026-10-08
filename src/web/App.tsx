@@ -11,6 +11,7 @@ import { ViewControls } from './ui/ViewControls';
 import { CommandCentre } from './ui/CommandCentre';
 import { RequestCards } from './ui/RequestCards';
 import { useControlAccess } from './state/control';
+import { placeRequests } from './state/requests';
 
 interface Selection {
   sessionId: string;
@@ -42,6 +43,7 @@ export function App(): ReactElement {
   const [focus, setFocus] = useState<CameraFocus>({ key: 'start', x: 0, z: 0, distance: 60 });
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null);
   const [replay, setReplay] = useState<ReplayControl>(IDLE_REPLAY);
+  const [, setReading] = useState<string | null>(null);
   const cameraHandle: CameraHandle = useRef(null);
 
   const placements = useMemo(
@@ -58,6 +60,7 @@ export function App(): ReactElement {
   const lab = session?.labs.find((candidate) => candidate.id === selection?.labId) ?? null;
   const detail = useLabDetail(lab ? selection?.sessionId ?? null : null, lab ? selection?.labId ?? null : null, lab?.version ?? 0);
   const bounds = useMemo(() => timelineBounds(detail?.timeline ?? []), [detail]);
+  const places = useMemo(() => placeRequests(world?.control?.requests ?? [], world?.sessions ?? []), [world]);
 
   useStartFocus(world, placements, setFocus);
   useReplayClock(replay, bounds.end, setReplay, reducedMotion);
@@ -108,6 +111,13 @@ export function App(): ReactElement {
     setFocus({ key: `overview:${Date.now()}`, ...overviewFocus(placements) });
   }, [placements]);
 
+
+  const showOldestWaiting = useCallback(() => {
+    const first = places.find((place) => place.labId);
+    if (!first?.labId) return;
+    selectLab(first.sessionId, first.labId, first.scientistId ? { kind: 'scientist', scientistId: first.scientistId } : { kind: 'lab' });
+  }, [places, selectLab]);
+
   const replayStates = replay.atMs !== null && detail && selection ? { ...selection, states: replayAt(detail.timeline, replay.atMs) } : null;
 
   return (
@@ -144,7 +154,8 @@ export function App(): ReactElement {
         onFocusContinent={focusContinent}
         onOverview={overview}
         onCommand={() => setCommandOpen((open) => !open)}
-        waitingOnYou={world?.control?.requests.length ?? 0}
+        waiting={places}
+        onShowWaiting={showOldestWaiting}
       />
       {world && (
         <RequestCards access={access} requests={world.control?.requests ?? []} sessions={world.sessions} now={now} />
@@ -179,6 +190,8 @@ export function App(): ReactElement {
           access={access}
           onView={setView}
           onClose={clearSelection}
+          places={places}
+          onReadConversation={setReading}
           replayBar={
             <ReplayBar
               start={bounds.start}

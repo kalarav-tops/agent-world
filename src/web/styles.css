@@ -1371,3 +1371,40 @@ textarea {
     animation: none !important;
   }
 }
+
+.request-form {
+  margin: 0.75rem 0;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--asking);
+  border-radius: var(--radius-control);
+}
+
+.request-form--permission {
+  border-left-color: var(--accent);
+}
+
+.section--waiting .section__title {
+  color: var(--asking);
+}
+
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reply__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reply__mode {
+  flex: 1;
+}
+
+.hud__chip--asking {
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
