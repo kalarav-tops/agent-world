@@ -236,3 +236,17 @@ test('replies to a session from its lab panel', async ({ page }) => {
   await panel.getByRole('button', { name: 'Send reply' }).click();
   await expect(panel.getByRole('status')).toContainText('Sent. A copy of this session');
 });
+
+test('keeps a half-typed prompt when Escape is pressed on the ship', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(baseUrl);
+  await page.getByRole('button', { name: /Command centre/ }).click();
+  const prompt = page.getByRole('form', { name: 'Launch' }).getByLabel('Prompt');
+  await prompt.fill('draft');
+  await prompt.press('Escape');
+  await expect(page.getByRole('button', { name: 'Return to world' })).toBeVisible();
+  await expect(prompt).toHaveValue('draft');
+  await prompt.blur();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.hud__stats')).toBeVisible();
+});

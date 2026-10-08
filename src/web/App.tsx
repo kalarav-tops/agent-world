@@ -8,7 +8,6 @@ import { Hud } from './ui/Hud';
 import { InspectPanel, type PanelView } from './ui/InspectPanel';
 import { ReplayBar, type ReplaySpeed } from './ui/ReplayBar';
 import { ViewControls } from './ui/ViewControls';
-import { RequestCards } from './ui/RequestCards';
 import { useControlAccess } from './state/control';
 import { placeRequests } from './state/requests';
 import { placeReducer, showsWorld, veilOpacity, warpPhase, type Place, type PlaceAction } from './state/place';
@@ -182,9 +181,6 @@ export function App(): ReactElement {
             waiting={places}
             onShowWaiting={showOldestWaiting}
           />
-          {world && (
-            <RequestCards access={access} requests={world.control?.requests ?? []} sessions={world.sessions} now={now} />
-          )}
           {denied && !connected && (
             <p className="notice notice--access" role="alert">
               This page needs its access link. Open the link Agent World printed in the terminal (it ends in <code>#token=…</code>); a new one is

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -194,5 +195,12 @@ describe('answering in place', () => {
     const labs = [lab()];
     const markup = renderToStaticMarkup(createElement(Hud, { world: world(labs), connected: true, now: NOW, focusedSessionId: null, onFocusContinent: () => undefined, onOverview: () => undefined, onCommand: () => undefined, waiting: placeRequests([askReq], [session(labs)]), onShowWaiting: () => undefined }));
     expect(markup).toMatch(/<button[^>]*class="hud__chip hud__chip--asking"[^>]*>.*1 waiting/);
+  });
+});
+
+describe('old command centre', () => {
+  it('is gone: no drawer and no request cards', () => {
+    expect(existsSync('src/web/ui/CommandCentre.tsx')).toBe(false);
+    expect(existsSync('src/web/ui/RequestCards.tsx')).toBe(false);
   });
 });
