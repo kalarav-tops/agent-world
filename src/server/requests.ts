@@ -3,8 +3,8 @@ import type { AgentQuestion, PendingRequest, QuestionOption } from '../shared/ty
 
 /** What the hook reports when an agent needs you. */
 export type RequestInput =
-  | { kind: 'question'; sessionId: string; questions: AgentQuestion[] }
-  | { kind: 'permission'; sessionId: string; tool: string; summary: string; detail: string; truncated: boolean };
+  | { kind: 'question'; sessionId: string; questions: AgentQuestion[]; toolUseId?: string }
+  | { kind: 'permission'; sessionId: string; tool: string; summary: string; detail: string; truncated: boolean; toolUseId?: string };
 
 /** Your answer to a request. */
 export type RequestAnswer = { answers: Record<string, string> } | { decision: 'allow' | 'deny' };
@@ -54,7 +54,7 @@ export class RequestStore {
   create(input: RequestInput, lifetimeMs: number): PendingRequest {
     this.prune();
     const created = this.now();
-    const base = { id: randomUUID(), sessionId: input.sessionId, createdAt: new Date(created).toISOString(), expiresAt: new Date(created + lifetimeMs).toISOString() };
+    const base = { id: randomUUID(), sessionId: input.sessionId, createdAt: new Date(created).toISOString(), expiresAt: new Date(created + lifetimeMs).toISOString(), ...(input.toolUseId ? { toolUseId: input.toolUseId } : {}) };
     const request: PendingRequest =
       input.kind === 'question'
         ? { ...base, kind: 'question', questions: input.questions }

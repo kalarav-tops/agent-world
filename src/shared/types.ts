@@ -183,8 +183,8 @@ export interface AgentQuestion {
 
 /** Something an agent is waiting on you for, raised by the Agent World hook. */
 export type PendingRequest =
-  | { id: string; kind: 'question'; sessionId: string; createdAt: string; expiresAt: string; questions: AgentQuestion[] }
-  | { id: string; kind: 'permission'; sessionId: string; createdAt: string; expiresAt: string; tool: string; summary: string; detail: string; truncated: boolean };
+  | { id: string; kind: 'question'; sessionId: string; createdAt: string; expiresAt: string; questions: AgentQuestion[]; toolUseId?: string }
+  | { id: string; kind: 'permission'; sessionId: string; createdAt: string; expiresAt: string; tool: string; summary: string; detail: string; truncated: boolean; toolUseId?: string };
 
 /** Command-centre state streamed with the world. */
 export interface ControlState {

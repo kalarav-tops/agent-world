@@ -237,3 +237,14 @@ describe('ControlService replies and memory-only logs', () => {
     expect(control.state().runs).toHaveLength(1);
   });
 });
+
+describe('ControlService.raise', () => {
+  it('keeps the tool call id the hook sends, when it looks like an id', () => {
+    const control = new ControlService({ enabled: true, engine, runner: null });
+    control.raise({ event: 'question', sessionId: 's1', toolInput: { questions: [{ question: 'Which?', header: 'Q', multiSelect: false, options: [{ label: 'A', description: '' }] }] }, toolUseId: 'toolu_01' });
+    control.raise({ event: 'permission', sessionId: 's1', toolName: 'Bash', toolInput: { command: 'ls' }, toolUseId: '../x y' });
+    const [first, second] = control.state().requests;
+    expect(first).toMatchObject({ kind: 'question', toolUseId: 'toolu_01' });
+    expect(second?.toolUseId).toBeUndefined();
+  });
+});

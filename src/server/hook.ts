@@ -16,6 +16,7 @@ interface HookInput {
   hook_event_name?: unknown;
   tool_name?: unknown;
   tool_input?: unknown;
+  tool_use_id?: unknown;
 }
 
 /** A verified reply from Agent World. */
@@ -47,7 +48,7 @@ async function main(): Promise<void> {
   const created = await call(server, `${base}/api/hook-requests`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ event, sessionId: input.session_id, toolName: input.tool_name, toolInput: input.tool_input }),
+    body: JSON.stringify({ event, sessionId: input.session_id, toolName: input.tool_name, toolInput: input.tool_input, ...(typeof input.tool_use_id === 'string' ? { toolUseId: input.tool_use_id } : {}) }),
   });
   const result = created?.status === 200 ? (created.body.result as { id?: unknown; lifetimeMs?: unknown } | undefined) : undefined;
   if (typeof result?.id !== 'string' || typeof result.lifetimeMs !== 'number') return;

@@ -195,13 +195,14 @@ export class ControlService {
     const lifetimeMs = this.options.requestLifetimeMs ?? DEFAULT_REQUEST_LIFETIME_MS;
     const tool = typeof body.toolName === 'string' ? body.toolName.slice(0, 200) : '';
     const input = typeof body.toolInput === 'object' && body.toolInput !== null ? (body.toolInput as Record<string, unknown>) : {};
+    const ids = typeof body.toolUseId === 'string' && ID.test(body.toolUseId) ? { toolUseId: body.toolUseId } : {};
     let request;
     if (body.event === 'question') {
       const questions = parseQuestions(input);
       if (!questions.length) return { ok: false, status: 400, reason: 'No questions.' };
-      request = this.requests.create({ kind: 'question', sessionId: body.sessionId, questions }, lifetimeMs);
+      request = this.requests.create({ kind: 'question', sessionId: body.sessionId, questions, ...ids }, lifetimeMs);
     } else if (body.event === 'permission' && tool) {
-      request = this.requests.create({ kind: 'permission', sessionId: body.sessionId, tool, summary: summarizeTool(tool, input), ...permissionDetail(tool, input) }, lifetimeMs);
+      request = this.requests.create({ kind: 'permission', sessionId: body.sessionId, tool, summary: summarizeTool(tool, input), ...permissionDetail(tool, input), ...ids }, lifetimeMs);
     } else {
       return { ok: false, status: 400, reason: 'Unknown event.' };
     }

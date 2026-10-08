@@ -92,6 +92,7 @@ const QUESTION_INPUT = {
   session_id: SESSION,
   hook_event_name: 'PreToolUse',
   tool_name: 'AskUserQuestion',
+  tool_use_id: 'toolu_hook',
   tool_input: { questions: [{ question: 'Which colour?', header: 'Colour', multiSelect: false, options: [{ label: 'Blue', description: '' }] }] },
 };
 
@@ -244,6 +245,8 @@ describe('questions from the hook', () => {
 
     const requestId = await firstRequestId();
     expect(requestId).toBeDefined();
+    const world = (await call(server.port, '/api/world')).body as unknown as WorldSummary;
+    expect(world.control?.requests.find((request) => request.id === requestId)?.toolUseId).toBe('toolu_hook');
     expect((await post(`/api/requests/${requestId}/answers`, { answers: { 'Which colour?': 'Blue' } })).status).toBe(200);
 
     const { code, stdout } = await hook.done;
