@@ -211,3 +211,20 @@ export interface ProjectView {
   branch: string;
   live: boolean;
 }
+
+/** One conversation started from the ship, or a reply sent from a lab panel. */
+export interface ShipLogEntry {
+  id: string;
+  kind: 'launch' | 'reply';
+  sessionId: string | null;
+  projectId: string | null;
+  projectName: string;
+  promptPreview: string;
+  model: string;
+  effort: string;
+  permissionMode: string;
+  startedAt: string;
+  endedAt: string | null;
+  state: 'running' | 'finished' | 'failed';
+  exitCode: number | null;
+}

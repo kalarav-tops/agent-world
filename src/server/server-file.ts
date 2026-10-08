@@ -46,7 +46,7 @@ export function writeLauncher(url: string, file = LAUNCHER_FILE): string {
  * @param file - file path
  * @param content - file content
  */
-function writePrivate(file: string, content: string): void {
+export function writePrivate(file: string, content: string): void {
   const folder = dirname(file);
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   chmodSync(folder, 0o700);
