@@ -85,7 +85,7 @@
 - `PreToolUse` hook input carries `tool_use_id`, so **questions** (AskUserQuestion) match their agent exactly.
 - `PermissionRequest` hook input has **no** `tool_use_id`, and no hook input names a subagent. **Permissions** are matched by the fallback rule only (Task 7), and nothing sends an agent id.
 - `--session-id`, `--name`, `--model` and `--effort` all work with `-p`; the effort values are `low|medium|high|xhigh|max|ultracode`. The spec's allow-list leaves out `ultracode` on purpose.
-- Not documented: (a) whether a `claude -p` run registers in `~/.claude/sessions/`, which decides whether it rises as an island; (b) whether `--session-id` is honoured together with `--resume … --fork-session`. Task 0 settles both.
+- Task 0 results (2026-10-08, Claude Code 2.1.292): (a) **yes**, a `claude -p` run registers in `~/.claude/sessions/` while it runs (it inherits `kind`/`entrypoint` from its environment), so launches rise as islands and Task 0b is skipped; (b) **yes**, `--session-id` is honoured with `--resume … --fork-session`, so Task 4 passes `newSessionId` for replies and logs their `sessionId`.
 
 ### Task 0: Spike — how `claude -p` runs show up (throwaway, uses a little Claude usage; ask the user first)
 
