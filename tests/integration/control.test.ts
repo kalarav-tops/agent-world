@@ -185,6 +185,9 @@ describe('prompt runs', () => {
     const start = calls.filter((entry) => entry.kind === 'start').at(-1);
     expect(start?.cwd).toBe(appDir);
     expect(start?.args).toContain('--session-id');
+    const { sessionId } = response.body.result as { sessionId: string };
+    const conversation = await call(server.port, `/api/conversations/${sessionId}`);
+    expect(conversation).toEqual({ status: 200, body: { items: [], live: false } });
   });
 
   it('refuses a launch with an unknown project or a bad prompt', async () => {

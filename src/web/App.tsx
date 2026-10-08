@@ -74,6 +74,7 @@ export function App(): ReactElement {
   useWarpClock(place, reducedMotion, dispatch, setClock);
 
   const clearSelection = useCallback(() => {
+    setReading(null);
     setSelection(null);
     setReplay(IDLE_REPLAY);
   }, []);
@@ -99,6 +100,7 @@ export function App(): ReactElement {
     (sessionId: string, labId: string, nextView: PanelView = { kind: 'lab' }) => {
       if (!world) return;
       if (selection?.sessionId !== sessionId || selection.labId !== labId) setReplay(IDLE_REPLAY);
+      setReading(null);
       setSelection({ sessionId, labId });
       setView(nextView);
       setFocusedSessionId(sessionId);
@@ -126,6 +128,11 @@ export function App(): ReactElement {
 
   const enterShip = useCallback(() => dispatch({ type: 'enter', at: performance.now() }), []);
   const leaveShip = useCallback(() => dispatch({ type: 'leave', at: performance.now() }), []);
+  const waitingPlace = places.find((candidate) => candidate.labId);
+  const goToWaiting = useCallback(() => {
+    if (!waitingPlace?.labId) return;
+    dispatch({ type: 'leave', at: performance.now(), target: { sessionId: waitingPlace.sessionId, labId: waitingPlace.labId, scientistId: waitingPlace.scientistId } });
+  }, [waitingPlace]);
 
   const showOldestWaiting = useCallback(() => {
     const first = places.find((place) => place.labId);
@@ -234,6 +241,7 @@ export function App(): ReactElement {
             reducedMotion={reducedMotion}
             waiting={places.length > 0}
             onLeave={leaveShip}
+            onShowWaiting={goToWaiting}
             screens={
               <>
                 <LaunchScreen access={access} onLaunched={setSelectedRun} />
@@ -256,6 +264,12 @@ export function App(): ReactElement {
             <Icon name="back" />
             Return to world
           </button>
+          {waitingPlace && (
+            <button type="button" className="hud__chip hud__chip--asking ship-overlay__waiting" onClick={goToWaiting}>
+              <span className="status-dot status-dot--asking" aria-hidden="true" />
+              {places.length} waiting
+            </button>
+          )}
         </div>
       )}
       <div className="warp-veil" style={{ opacity: veilOpacity(place, clock, reducedMotion) }} aria-hidden="true" />

@@ -12,6 +12,7 @@ interface ShipSceneProps {
   reducedMotion: boolean;
   waiting: boolean;
   onLeave: () => void;
+  onShowWaiting: () => void;
   screens: ReactNode;
 }
 
@@ -19,10 +20,10 @@ interface ShipSceneProps {
  * The ship: the warp tunnel while travelling, then the bridge. It has its own canvas, so the world
  * is not drawn while you are on board. If the graphics context is lost mid-warp, it skips the
  * tunnel and shows the bridge.
- * @param props - place, clock, motion preference, waiting flag, leave handler and console screens
+ * @param props - place, clock, motion preference, waiting flag, leave and waiting handlers, console screens
  * @returns the scene
  */
-export function ShipScene({ place, now, reducedMotion, waiting, onLeave, screens }: ShipSceneProps): ReactElement {
+export function ShipScene({ place, now, reducedMotion, waiting, onLeave, onShowWaiting, screens }: ShipSceneProps): ReactElement {
   const [contextLost, setContextLost] = useState(false);
   const [layerElement, setLayerElement] = useState<HTMLDivElement | null>(null);
   const labelLayer = useMemo(() => (layerElement ? { current: layerElement } : null), [layerElement]);
@@ -43,7 +44,7 @@ export function ShipScene({ place, now, reducedMotion, waiting, onLeave, screens
               gl.domElement.addEventListener('webglcontextlost', () => setContextLost(true), { once: true });
             }}
           >
-            {tunnel ? <WarpTunnel speed={speed} /> : <Bridge waiting={waiting} reducedMotion={reducedMotion} onLeave={onLeave} screens={screens} />}
+            {tunnel ? <WarpTunnel speed={speed} /> : <Bridge waiting={waiting} reducedMotion={reducedMotion} onLeave={onLeave} onShowWaiting={onShowWaiting} screens={screens} />}
           </Canvas>
         </LabelLayerContext.Provider>
       )}

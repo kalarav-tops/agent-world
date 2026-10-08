@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react';
+import type { ProjectView } from '../../shared/types';
 import { sendControl, type ControlAccess } from '../state/control';
 import { useProjects } from '../state/ship';
 import { Icon } from '../ui/icons';
@@ -22,7 +23,8 @@ export function LaunchScreen({ access, onLaunched }: { access: ControlAccess; on
   const [state, setState] = useState<{ kind: 'idle' | 'sending' } | { kind: 'error'; text: string }>({ kind: 'idle' });
 
   useEffect(() => {
-    if (!projectId && projects[0]) setProjectId(projects[0].id);
+    const next = chooseProject(projects, projectId);
+    if (next !== projectId) setProjectId(next);
   }, [projects, projectId]);
 
   const launch = async (event?: FormEvent): Promise<void> => {
@@ -108,4 +110,15 @@ export function LaunchScreen({ access, onLaunched }: { access: ControlAccess; on
       <small className="muted">Ctrl+Enter launches. Each launch uses your Claude usage and rises as its own island.</small>
     </form>
   );
+}
+
+/**
+ * The project the Launch form should hold: the current one while it is still listed, otherwise the
+ * first, so a project that disappeared on reload is never sent again.
+ * @param projects - listed projects
+ * @param current - id held now, or empty
+ * @returns project id, or empty when there are none
+ */
+export function chooseProject(projects: ProjectView[], current: string): string {
+  return projects.some((project) => project.id === current) ? current : projects[0]?.id ?? '';
 }

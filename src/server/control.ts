@@ -156,6 +156,15 @@ export class ControlService {
   }
 
   /**
+   * Whether a run with this session id is still going, so its transcript may not be written yet.
+   * @param sessionId - session id
+   * @returns true while running
+   */
+  isRunning(sessionId: string): boolean {
+    return this.log.some((entry) => entry.sessionId === sessionId && entry.state === 'running');
+  }
+
+  /**
    * Ask a session to explain a lab's or one agent's work.
    * @param body - request body from the browser
    * @returns the explanation, or why it failed

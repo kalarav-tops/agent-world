@@ -1447,3 +1447,12 @@ textarea {
 .status-dot--failed {
   background: var(--stopped);
 }
+
+.ship-overlay {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ship-overlay__waiting {
+  background: var(--surface);
+}

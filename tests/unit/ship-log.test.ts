@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,5 +72,21 @@ describe('ship log', () => {
   it('keeps a short one-line preview of the prompt', () => {
     expect(previewOf(`  ${'x'.repeat(400)}`)).toHaveLength(280);
     expect(previewOf('one\ntwo')).toBe('one two');
+  });
+});
+
+describe('ship log warnings', () => {
+  it('says so on stderr when the file cannot be read, or entries are dropped', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    mkdirSync(file, { recursive: true });
+    expect(readShipLog(file)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not read the ship log'));
+    rmSync(file, { recursive: true });
+    warn.mockClear();
+    writeShipLog([entry('a')], file);
+    writeFileSync(file, JSON.stringify([entry('ok'), { id: 5 }]));
+    readShipLog(file);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('dropped 1 malformed'));
+    warn.mockRestore();
   });
 });

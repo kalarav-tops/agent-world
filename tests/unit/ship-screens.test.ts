@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Conversation } from '../../src/web/ui/Conversation';
 import { HistoryScreen } from '../../src/web/ship/HistoryScreen';
+import { chooseProject } from '../../src/web/ship/LaunchScreen';
 import type { ShipLogEntry } from '../../src/shared/types';
 
 const AT = '2026-10-08T10:00:00.000Z';
@@ -36,5 +37,19 @@ describe('HistoryScreen', () => {
 
   it('says when nothing has been launched yet', () => {
     expect(renderToStaticMarkup(createElement(HistoryScreen, { runs: [], selectedId: null, onSelect: () => undefined, onGoToLab: () => undefined, sessions: [], now: 0 }))).toContain('Nothing launched yet');
+  });
+});
+
+describe('chooseProject', () => {
+  const projects = [{ id: 'a', name: 'a', branch: '', live: true }, { id: 'b', name: 'b', branch: '', live: false }];
+
+  it('keeps the chosen project while it is still listed', () => {
+    expect(chooseProject(projects, 'b')).toBe('b');
+  });
+
+  it('falls back to the first project when the chosen one left the list, or none is chosen', () => {
+    expect(chooseProject(projects, 'gone')).toBe('a');
+    expect(chooseProject(projects, '')).toBe('a');
+    expect(chooseProject([], 'gone')).toBe('');
   });
 });

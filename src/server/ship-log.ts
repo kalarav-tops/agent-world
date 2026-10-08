@@ -17,7 +17,7 @@ const STATES = new Set(['running', 'finished', 'failed']);
 
 /**
  * Read the ship log. A missing file is an empty history; an unreadable one is logged and treated as
- * empty, and is replaced at the next write. Runs still marked running were cut off when an earlier
+ * empty, and is replaced at the next write. Malformed entries are dropped, with a line saying so. Runs still marked running were cut off when an earlier
  * Agent World stopped, so they come back as failed.
  * @param file - log path (tests pass a temporary one)
  * @returns entries, newest first
@@ -26,13 +26,16 @@ export function readShipLog(file = SHIP_LOG_FILE): ShipLogEntry[] {
   let raw: string;
   try {
     raw = readFileSync(file, 'utf8');
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') process.stderr.write(`agent-world: could not read the ship log ${file}: ${(error as Error).message}\n`);
     return [];
   }
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) throw new Error('not a list');
-    return parsed.filter(isEntry).slice(0, SHIP_LOG_LIMIT).map((entry) => (entry.state === 'running' ? { ...entry, state: 'failed' as const, exitCode: null } : entry));
+    const entries = parsed.filter(isEntry);
+    if (entries.length < parsed.length) process.stderr.write(`agent-world: dropped ${parsed.length - entries.length} malformed ship log entries from ${file}\n`);
+    return entries.slice(0, SHIP_LOG_LIMIT).map((entry) => (entry.state === 'running' ? { ...entry, state: 'failed' as const, exitCode: null } : entry));
   } catch (error) {
     process.stderr.write(`agent-world: ignoring unreadable ship log ${file}: ${(error as Error).message}\n`);
     return [];

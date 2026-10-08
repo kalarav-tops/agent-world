@@ -6,11 +6,12 @@ import { Label } from '../scene/Label';
 
 /**
  * The ship's bridge: a dark cockpit, a curved console under a wide window onto drifting stars, the
- * console screens, a light that flashes while an agent waits, and the lever back to the world.
- * @param props - whether anyone is waiting, the motion preference, the leave handler and the screens
+ * console screens, a light that flashes while an agent waits (click it to go to that agent), and the
+ * lever back to the world.
+ * @param props - whether anyone is waiting, the motion preference, the leave and waiting handlers, and the screens
  * @returns the bridge
  */
-export function Bridge({ waiting, reducedMotion, onLeave, screens }: { waiting: boolean; reducedMotion: boolean; onLeave: () => void; screens: ReactNode }): ReactElement {
+export function Bridge({ waiting, reducedMotion, onLeave, onShowWaiting, screens }: { waiting: boolean; reducedMotion: boolean; onLeave: () => void; onShowWaiting: () => void; screens: ReactNode }): ReactElement {
   const light = useRef<Mesh>(null);
   useFrame((state) => {
     const material = light.current?.material as MeshStandardMaterial | undefined;
@@ -38,7 +39,7 @@ export function Bridge({ waiting, reducedMotion, onLeave, screens }: { waiting: 
         <torusGeometry args={[3.25, 0.025, 8, 64, Math.PI * 0.5]} />
         <meshBasicMaterial color="#ff9f1c" toneMapped={false} />
       </mesh>
-      <mesh ref={light} position={[2.2, -0.05, -1.9]}>
+      <mesh ref={light} position={[2.2, -0.05, -1.9]} onClick={onShowWaiting}>
         <sphereGeometry args={[0.09, 12, 12]} />
         <meshStandardMaterial color="#e86fa8" emissive="#e86fa8" toneMapped={false} />
       </mesh>

@@ -225,7 +225,10 @@ async function conversationOf(res: ServerResponse, options: ServerOptions, sessi
   if (!live && !options.control?.hasLogged(sessionId)) return reply(res, 404, { error: 'not found' });
   try {
     const path = await options.engine.transcriptPath(sessionId);
-    if (!path) return reply(res, 404, { error: 'This conversation\'s transcript is gone.' });
+    if (!path) {
+      if (live || options.control?.isRunning(sessionId)) return reply(res, 200, { items: [], live });
+      return reply(res, 404, { error: 'This conversation\'s transcript is gone.' });
+    }
     return reply(res, 200, { items: await readConversation(path), live });
   } catch (error) {
     process.stderr.write(`agent-world: conversation ${sessionId} failed: ${(error as Error).message}\n`);

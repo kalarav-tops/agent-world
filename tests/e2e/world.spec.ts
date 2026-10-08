@@ -250,3 +250,39 @@ test('keeps a half-typed prompt when Escape is pressed on the ship', async ({ pa
   await page.keyboard.press('Escape');
   await expect(page.locator('.hud__stats')).toBeVisible();
 });
+
+test('closes the conversation reader when a lab is opened or Escape is pressed', async ({ page }) => {
+  await page.goto(baseUrl);
+  await page.locator('.lab-tag').first().click();
+  await page.getByRole('complementary').getByRole('button', { name: /Read conversation/ }).click();
+  const reader = page.getByRole('complementary', { name: 'Conversation' });
+  await expect(reader).toBeVisible();
+  await page.locator('.lab-tag').first().click();
+  await expect(reader).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: /Lab \d+ details/ })).toBeVisible();
+  await page.getByRole('complementary').getByRole('button', { name: /Read conversation/ }).click();
+  await expect(reader).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(reader).toHaveCount(0);
+});
+
+test('goes from the ship to an agent that is waiting on you', async ({ page }) => {
+  const questions = [{ question: 'Ship or world?', header: 'Where', multiSelect: false, options: [{ label: 'World', description: '' }] }];
+  addSession('e2e-ask2', '/work/ask-two', 'e.json', [humanPrompt('Ask from the ship', 0), toolUse('q2', 'AskUserQuestion', { questions }, 1)]);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(baseUrl);
+  await page.getByRole('button', { name: /Command centre/ }).click();
+  await expect(page.getByRole('button', { name: 'Return to world' })).toBeVisible();
+  const hook = spawn(process.execPath, ['dist/server/hook.js'], { env: { ...process.env, HOME: homeDir }, stdio: ['pipe', 'pipe', 'inherit'] });
+  let stdout = '';
+  hook.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+  const done = new Promise<void>((resolve) => hook.on('close', () => resolve()));
+  hook.stdin.end(JSON.stringify({ session_id: 'e2e-ask2', hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_use_id: 'q2', tool_input: { questions } }));
+  await page.getByRole('button', { name: /1 waiting/ }).click();
+  const panel = page.getByRole('complementary');
+  await expect(panel).toContainText('Ship or world?');
+  await panel.getByRole('button', { name: /World/ }).click();
+  await panel.getByRole('button', { name: 'Send answer' }).click();
+  await done;
+  expect(stdout).toContain('World');
+});

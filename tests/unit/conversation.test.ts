@@ -1,4 +1,9 @@
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readConversation } from '../../src/server/conversation-file';
+import { assistantText, humanPrompt } from '../fixtures/lines';
 import { buildConversation } from '../../src/shared/conversation';
 import type { WorldEvent } from '../../src/shared/types';
 
@@ -29,5 +34,20 @@ describe('buildConversation', () => {
   it('skips empty text and keeps only the newest items', () => {
     const events: WorldEvent[] = Array.from({ length: 10 }, (_, index) => ({ kind: 'text', at: AT, text: index === 0 ? '  ' : `m${index}`, final: false }));
     expect(buildConversation(events, 3).map((item) => ('text' in item ? item.text : ''))).toEqual(['m7', 'm8', 'm9']);
+  });
+});
+
+describe('readConversation', () => {
+  it('reuses the last result while the transcript is unchanged, and rereads it after it grows', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'aw-conv-'));
+    const path = join(folder, 's.jsonl');
+    writeFileSync(path, `${JSON.stringify(humanPrompt('Hello', 0))}\n`);
+    const first = await readConversation(path);
+    expect(await readConversation(path)).toBe(first);
+    appendFileSync(path, `${JSON.stringify(assistantText('Hi there', true, 1))}\n`);
+    const grown = await readConversation(path);
+    expect(grown).not.toBe(first);
+    expect(grown.map((item) => item.kind)).toEqual(['prompt', 'reply']);
+    rmSync(folder, { recursive: true, force: true });
   });
 });
