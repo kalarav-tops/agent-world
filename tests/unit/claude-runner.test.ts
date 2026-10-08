@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { relative as relativePath } from 'node:path';
 import { findClaude, processRunner, readResult } from '../../src/server/claude-runner';
 
 let folder: string;
@@ -85,6 +86,11 @@ describe('processRunner', () => {
 describe('findClaude and readResult', () => {
   it('prefers an explicit executable path', () => {
     expect(findClaude(binary)).toBe(binary);
+  });
+
+  it('makes a relative explicit path absolute, so runs in other folders still find it', () => {
+    const relative = relativePath(process.cwd(), binary);
+    expect(findClaude(relative)).toBe(binary);
   });
 
   it('reads the result field, or falls back to the raw text', () => {

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 
 /** A started prompt run. */
 export interface RunHandle {
@@ -23,13 +23,14 @@ const OWN_GROUP = process.platform !== 'win32';
 
 /**
  * Find the `claude` executable: an explicit path, then PATH, then the usual install locations
- * (the installer often adds only a shell alias, which a server process cannot see).
+ * (the installer often adds only a shell alias, which a server process cannot see). An explicit
+ * path is made absolute, because runs start in other folders.
  * @param explicit - path given by flag or environment
- * @returns the executable path, or null when none is found
+ * @returns the absolute executable path, or null when none is found
  */
 export function findClaude(explicit?: string): string | null {
   const candidates = [
-    explicit,
+    explicit ? resolve(explicit) : undefined,
     ...(process.env.PATH ?? '').split(delimiter).map((folder) => join(folder, 'claude')),
     join(homedir(), '.local', 'bin', 'claude'),
     join(homedir(), '.claude', 'local', 'claude'),

@@ -67,17 +67,18 @@ describe('scanProjects', () => {
 });
 
 describe('ProjectCatalog', () => {
-  it('caches the scan and finds a project by id', async () => {
-    let calls = 0;
-    const catalog = new ProjectCatalog({ claudeDir, live: () => (calls++, [{ cwd: '/work/live', branch: '' }]), now: () => NOW, ttlMs: 30_000 });
-    await catalog.list();
-    await catalog.list();
-    expect(calls).toBe(1);
-    expect((await catalog.find(projectId('/work/live')))?.cwd).toBe('/work/live');
+  it('caches the folder scan but always reads live sessions fresh, and finds a project by id', async () => {
+    let live = [{ cwd: '/work/live', branch: '' }];
+    const catalog = new ProjectCatalog({ claudeDir, live: () => live, now: () => NOW, ttlMs: 30_000 });
+    transcript('-work-api', 'b.jsonl', [{ type: 'user', cwd: '/work/api' }], NOW - 1000);
+    expect((await catalog.list()).map((project) => project.cwd)).toEqual(['/work/live', '/work/api']);
+    transcript('-work-web', 'c.jsonl', [{ type: 'user', cwd: '/work/web' }], NOW - 500);
+    live = [...live, { cwd: '/work/new', branch: 'main' }];
+    expect((await catalog.list()).map((project) => project.cwd)).toEqual(['/work/live', '/work/new', '/work/api']);
+    expect((await catalog.find(projectId('/work/new')))?.cwd).toBe('/work/new');
     expect(await catalog.find('0000000000000000')).toBeUndefined();
     catalog.invalidate();
-    await catalog.list();
-    expect(calls).toBe(2);
+    expect((await catalog.list()).map((project) => project.cwd)).toEqual(['/work/live', '/work/new', '/work/web', '/work/api']);
   });
 
   it('never puts the path in the browser view', () => {

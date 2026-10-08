@@ -14,6 +14,10 @@ import { placeRequests } from './state/requests';
 import { placeReducer, showsWorld, veilOpacity, warpPhase, type Place, type PlaceAction } from './state/place';
 import { ShipScene } from './ship/ShipScene';
 import { Icon } from './ui/icons';
+import { LaunchScreen } from './ship/LaunchScreen';
+import { HistoryScreen } from './ship/HistoryScreen';
+import { Conversation } from './ui/Conversation';
+import { useConversation } from './state/ship';
 
 interface Selection {
   sessionId: string;
@@ -46,7 +50,8 @@ export function App(): ReactElement {
   const [focus, setFocus] = useState<CameraFocus>({ key: 'start', x: 0, z: 0, distance: 60 });
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null);
   const [replay, setReplay] = useState<ReplayControl>(IDLE_REPLAY);
-  const [, setReading] = useState<string | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
+  const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const cameraHandle: CameraHandle = useRef(null);
 
   const placements = useMemo(
@@ -76,11 +81,16 @@ export function App(): ReactElement {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') clearSelection();
+      if (event.key !== 'Escape') return;
+      if (place.kind === 'ship') {
+        if (!(event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable]')) dispatch({ type: 'leave', at: performance.now() });
+        return;
+      }
+      clearSelection();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [clearSelection]);
+  }, [clearSelection, place.kind]);
 
   useEffect(() => {
     if (selection && world && !lab) clearSelection();
@@ -185,7 +195,8 @@ export function App(): ReactElement {
           {world && world.sessions.length === 0 && (
             <p className="notice">No Claude Code sessions are running. Start one and it will rise here as a new continent.</p>
           )}
-          {session && lab && (
+          {reading && <ReaderPanel sessionId={reading} onClose={() => setReading(null)} />}
+          {!reading && session && lab && (
             <InspectPanel
               session={session}
               lab={lab}
@@ -221,7 +232,26 @@ export function App(): ReactElement {
         </>
       ) : (
         <SceneBoundary>
-          <ShipScene place={place} now={clock} reducedMotion={reducedMotion} waiting={places.length > 0} onLeave={leaveShip} screens={null} />
+          <ShipScene
+            place={place}
+            now={clock}
+            reducedMotion={reducedMotion}
+            waiting={places.length > 0}
+            onLeave={leaveShip}
+            screens={
+              <>
+                <LaunchScreen access={access} onLaunched={setSelectedRun} />
+                <HistoryScreen
+                  runs={world?.control?.runs ?? []}
+                  selectedId={selectedRun}
+                  onSelect={setSelectedRun}
+                  onGoToLab={(target) => dispatch({ type: 'leave', at: performance.now(), target })}
+                  sessions={world?.sessions ?? []}
+                  now={now}
+                />
+              </>
+            }
+          />
         </SceneBoundary>
       )}
       {place.kind === 'ship' && (
@@ -376,4 +406,28 @@ function useLanding(place: Place, selectLab: (sessionId: string, labId: string, 
     const { sessionId, labId, scientistId } = before.target;
     selectLab(sessionId, labId, scientistId ? { kind: 'scientist', scientistId } : { kind: 'lab' });
   }, [place, selectLab]);
+}
+
+/**
+ * A conversation read as chat, in the side panel's place.
+ * @param props - the session to read and the close handler
+ * @returns the panel
+ */
+function ReaderPanel({ sessionId, onClose }: { sessionId: string; onClose: () => void }): ReactElement {
+  const { items, error } = useConversation(sessionId, true);
+  return (
+    <aside className="panel reader" aria-label="Conversation">
+      <header className="panel__header">
+        <div className="panel__heading">
+          <h2 className="panel__title">Conversation</h2>
+        </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close conversation" title="Close">
+          <Icon name="close" />
+        </button>
+      </header>
+      <div className="panel__body">
+        <Conversation items={items} error={error} />
+      </div>
+    </aside>
+  );
 }

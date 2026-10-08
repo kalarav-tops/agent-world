@@ -44,13 +44,23 @@ export function projectId(cwd: string): string {
  * @returns known projects
  */
 export async function scanProjects(claudeDir: string, live: LiveProject[], now: number): Promise<KnownProject[]> {
-  const recent = await recentProjects(join(claudeDir, 'projects'), now);
+  return mergeProjects(live, await recentProjects(join(claudeDir, 'projects'), now), now);
+}
+
+/**
+ * Live projects first, then recent ones not already listed, newest first.
+ * @param live - live sessions' folders and branches
+ * @param recent - projects from recent transcripts
+ * @param now - current time, epoch milliseconds
+ * @returns known projects
+ */
+function mergeProjects(live: LiveProject[], recent: KnownProject[], now: number): KnownProject[] {
   const byCwd = new Map<string, KnownProject>();
   for (const project of live) {
     const found = recent.find((candidate) => candidate.cwd === project.cwd);
     byCwd.set(project.cwd, { id: projectId(project.cwd), cwd: project.cwd, name: basename(project.cwd) || project.cwd, branch: project.branch || found?.branch || '', live: true, lastActive: now });
   }
-  for (const project of recent.sort((left, right) => right.lastActive - left.lastActive)) {
+  for (const project of [...recent].sort((left, right) => right.lastActive - left.lastActive)) {
     if (!byCwd.has(project.cwd)) byCwd.set(project.cwd, project);
   }
   return [...byCwd.values()];
@@ -65,9 +75,12 @@ export function toView(project: KnownProject): ProjectView {
   return { id: project.id, name: project.name, branch: project.branch, live: project.live };
 }
 
-/** Caches the project scan for a short while; launches look projects up here by id. */
+/**
+ * Known projects; launches look projects up here by id. The folder scan is cached for a short
+ * while, but live sessions are read fresh every time, so a session that just started is listed.
+ */
 export class ProjectCatalog {
-  private cached: { at: number; projects: KnownProject[] } | null = null;
+  private cached: { at: number; recent: KnownProject[] } | null = null;
   private readonly now: () => number;
 
   /**
@@ -78,15 +91,15 @@ export class ProjectCatalog {
   }
 
   /**
-   * Known projects, rescanned when the cache is older than its lifetime.
+   * Known projects: live sessions now, plus the folder scan, rescanned when older than its lifetime.
    * @returns projects
    */
   async list(): Promise<KnownProject[]> {
     const now = this.now();
-    if (this.cached && now - this.cached.at < (this.options.ttlMs ?? DEFAULT_TTL_MS)) return this.cached.projects;
-    const projects = await scanProjects(this.options.claudeDir, this.options.live(), now);
-    this.cached = { at: now, projects };
-    return projects;
+    if (!this.cached || now - this.cached.at >= (this.options.ttlMs ?? DEFAULT_TTL_MS)) {
+      this.cached = { at: now, recent: await recentProjects(join(this.options.claudeDir, 'projects'), now) };
+    }
+    return mergeProjects(this.options.live(), this.cached.recent, now);
   }
 
   /**

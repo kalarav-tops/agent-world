@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { assistantText, humanPrompt, setFixtureBase, thinking, toolResult, toolUse } from '../fixtures/lines';
 
@@ -11,7 +11,11 @@ const SIDE_SESSION = 'e2e-side';
 let claudeDir: string;
 let mainTranscript: string;
 let server: ChildProcess;
+let offServer: ChildProcess;
 let baseUrl: string;
+let offUrl: string;
+let homeDir: string;
+let appDir: string;
 
 /**
  * Serialize transcript lines as JSONL.
@@ -40,6 +44,26 @@ const addSession = (sessionId: string, cwd: string, registryName: string, lines:
   return transcript;
 };
 
+/**
+ * Start the built server against the fixture folder and wait for its keyed link.
+ * @param extraArgs - extra command-line options
+ * @param env - extra environment
+ * @returns the process and its link
+ */
+const startCli = (extraArgs: string[], env: Record<string, string>): Promise<{ child: ChildProcess; url: string }> => {
+  const child = spawn(process.execPath, ['dist/server/cli.js', '--port', '0', '--claude-dir', claudeDir, '--poll', '200', ...extraArgs], { stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('server did not start')), 15_000);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      const match = /open (http:\/\/127\.0\.0\.1:\d+\/#token=[0-9a-f]+)/.exec(chunk.toString());
+      if (match?.[1]) {
+        clearTimeout(timer);
+        resolve({ child, url: match[1] });
+      }
+    });
+  });
+};
+
 test.beforeAll(async () => {
   setFixtureBase(Date.now() + 120_000);
   claudeDir = mkdtempSync(join(tmpdir(), 'agent-world-e2e-'));
@@ -56,22 +80,18 @@ test.beforeAll(async () => {
   writeFileSync(join(subDir, 'agent-ag1.jsonl'), jsonl(thinking(2), toolUse('g1', 'Grep', { pattern: 'login' }, 3)));
   addSession(SIDE_SESSION, '/work/docs-site', 'b.json', [humanPrompt('Update the README'), assistantText('README updated')]);
 
-  server = spawn(process.execPath, ['dist/server/cli.js', '--port', '0', '--claude-dir', claudeDir, '--poll', '200'], { stdio: ['ignore', 'pipe', 'inherit'] });
-  baseUrl = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('server did not start')), 15_000);
-    server.stdout?.on('data', (chunk: Buffer) => {
-      const match = /open (http:\/\/127\.0\.0\.1:\d+\/#token=[0-9a-f]+)/.exec(chunk.toString());
-      if (match?.[1]) {
-        clearTimeout(timer);
-        resolve(match[1]);
-      }
-    });
-  });
+  homeDir = mkdtempSync(join(tmpdir(), 'agent-world-e2e-home-'));
+  appDir = mkdtempSync(join(tmpdir(), 'agent-world-e2e-app-'));
+  ({ child: server, url: baseUrl } = await startCli(['--allow-control', '--claude-bin', 'tests/fixtures/fake-claude.mjs'], { HOME: homeDir, FAKE_CLAUDE_DIR: claudeDir }));
+  ({ child: offServer, url: offUrl } = await startCli([], {}));
 });
 
 test.afterAll(() => {
   server?.kill();
+  offServer?.kill();
   rmSync(claudeDir, { recursive: true, force: true });
+  rmSync(homeDir, { recursive: true, force: true });
+  rmSync(appDir, { recursive: true, force: true });
 });
 
 test('shows every live session as a continent with live counts', async ({ page }) => {
@@ -119,9 +139,11 @@ test('replays a lab and returns to live', async ({ page }) => {
 
 test('explains how to turn on the command centre when it is off', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto(baseUrl);
+  await page.goto(offUrl);
   await page.getByRole('button', { name: /Command centre/ }).click();
-  await expect(page.getByRole('button', { name: 'Return to world' })).toBeVisible();
+  const launch = page.getByRole('region', { name: 'Launch' });
+  await expect(launch).toContainText('The command centre is off');
+  await expect(launch).toContainText('--allow-control');
 });
 
 test('takes the access key out of the address bar and keeps working after a reload', async ({ page }) => {
@@ -169,4 +191,48 @@ test('warps to the ship and back', async ({ page }) => {
   await expect(page.locator('.hud__stats')).toHaveCount(0);
   await page.getByRole('button', { name: 'Return to world' }).click();
   await expect(page.locator('.hud__stats')).toContainText(/\d+ sessions?/);
+});
+
+test('launches a fresh conversation from the ship and reads it in History', async ({ page }) => {
+  addSession('e2e-app', appDir, 'c.json', [humanPrompt('Set up the app', 0), assistantText('Set up.', true, 1)]);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(baseUrl);
+  await page.getByRole('button', { name: /Command centre/ }).click();
+  const launch = page.getByRole('form', { name: 'Launch' });
+  await expect(launch.getByLabel('Project').locator('option', { hasText: basename(appDir) })).toHaveCount(1);
+  const options = await launch.getByLabel('Project').locator('option').allTextContents();
+  await launch.getByLabel('Project').selectOption({ index: options.findIndex((text) => text.includes(basename(appDir))) });
+  await launch.getByLabel('Prompt').fill('Write a haiku about retries');
+  await launch.getByRole('button', { name: 'Launch' }).click();
+  const history = page.getByRole('region', { name: 'History' });
+  await expect(history).toContainText('Write a haiku about retries');
+  await expect(history).toContainText('Fake reply: done.');
+});
+
+test('answers an agent question in the agent panel', async ({ page }) => {
+  const questions = [{ question: 'Which colour?', header: 'Colour', multiSelect: false, options: [{ label: 'Blue', description: '' }, { label: 'Red', description: '' }] }];
+  addSession('e2e-ask', '/work/ask-app', 'd.json', [humanPrompt('Pick a colour', 0), toolUse('q1', 'AskUserQuestion', { questions }, 1)]);
+  await page.goto(baseUrl);
+  await expect(page.locator('.hud__stats')).toContainText(/\d+ sessions?/);
+  const hook = spawn(process.execPath, ['dist/server/hook.js'], { env: { ...process.env, HOME: homeDir }, stdio: ['pipe', 'pipe', 'inherit'] });
+  let stdout = '';
+  hook.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+  const done = new Promise<void>((resolve) => hook.on('close', () => resolve()));
+  hook.stdin.end(JSON.stringify({ session_id: 'e2e-ask', hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_use_id: 'q1', tool_input: { questions } }));
+  await page.getByRole('button', { name: /1 waiting/ }).click();
+  const panel = page.getByRole('complementary');
+  await expect(panel).toContainText('Which colour?');
+  await panel.getByRole('button', { name: /Blue/ }).click();
+  await panel.getByRole('button', { name: 'Send answer' }).click();
+  await done;
+  expect(stdout).toContain('Blue');
+});
+
+test('replies to a session from its lab panel', async ({ page }) => {
+  await page.goto(baseUrl);
+  await page.locator('.lab-tag').first().click();
+  const panel = page.getByRole('complementary');
+  await panel.getByLabel('Reply to this session').fill('Now add tests');
+  await panel.getByRole('button', { name: 'Send reply' }).click();
+  await expect(panel.getByRole('status')).toContainText('Sent. A copy of this session');
 });
