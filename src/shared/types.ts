@@ -203,3 +203,11 @@ export interface ControlState {
   requests: PendingRequest[];
   runs: ControlRun[];
 }
+
+/** A project a fresh conversation can start in, as the browser sees it (never a path). */
+export interface ProjectView {
+  id: string;
+  name: string;
+  branch: string;
+  live: boolean;
+}

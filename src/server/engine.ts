@@ -6,6 +6,7 @@ import { findTranscript, listLiveSessions } from './registry.js';
 import { summarizeWorld } from './summary.js';
 import { JsonlTailer } from './tailer.js';
 import { applyMainEvents, applySubagentEvents, createSession, type SubagentMeta } from './world.js';
+import type { LiveProject } from './projects.js';
 
 /** Engine settings. */
 export interface EngineOptions {
@@ -128,6 +129,23 @@ export class Engine {
     const session = this.watched.get(sessionId)?.session;
     if (!session) return undefined;
     return { sessionId: session.sessionId, pid: session.pid, cwd: session.cwd, kind: session.kind, entrypoint: session.entrypoint, startedAt: session.startedAt };
+  }
+
+  /**
+   * Folders and branches of live sessions, for the project catalogue.
+   * @returns live projects
+   */
+  liveProjects(): LiveProject[] {
+    return [...this.watched.values()].map(({ session }) => ({ cwd: session.cwd, branch: session.branch }));
+  }
+
+  /**
+   * Where a session's main transcript is, live or not.
+   * @param sessionId - session id, already checked against `[\w-]+`
+   * @returns transcript path, or null when there is none
+   */
+  transcriptPath(sessionId: string): Promise<string | null> {
+    return findTranscript(this.options.claudeDir, sessionId);
   }
 
   /**
