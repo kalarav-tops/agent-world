@@ -21,6 +21,7 @@ import {
 } from './security.js';
 import type { ControlService } from './control.js';
 import { handleControl } from './control-routes.js';
+import { readConversation } from './conversation-file.js';
 
 /** Server settings. */
 export interface ServerOptions {
@@ -174,6 +175,8 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, options: Serve
   if (req.method !== 'GET') return reply(res, 405, { error: 'method not allowed' });
 
   if (path === '/api/world') return reply(res, 200, worldOf(options));
+  const conversation = /^\/api\/conversations\/([\w-]{1,100})$/.exec(path);
+  if (conversation) return void conversationOf(res, options, conversation[1] ?? '');
   if (path.startsWith('/api/')) return labDetail(res, options.engine, path);
 
   const file = resolveStatic(options.webDir, path);
@@ -209,4 +212,23 @@ function labDetail(res: ServerResponse, engine: Engine, path: string): void {
 function reply(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
   res.end(JSON.stringify(body));
+}
+
+/**
+ * `GET /api/conversations/:sessionId`: a live session, or one the ship launched.
+ * @param res - response
+ * @param options - server settings
+ * @param sessionId - session id, already matched against `[\w-]+`
+ */
+async function conversationOf(res: ServerResponse, options: ServerOptions, sessionId: string): Promise<void> {
+  const live = options.engine.liveSession(sessionId) !== undefined;
+  if (!live && !options.control?.hasLogged(sessionId)) return reply(res, 404, { error: 'not found' });
+  try {
+    const path = await options.engine.transcriptPath(sessionId);
+    if (!path) return reply(res, 404, { error: 'This conversation\'s transcript is gone.' });
+    return reply(res, 200, { items: await readConversation(path), live });
+  } catch (error) {
+    process.stderr.write(`agent-world: conversation ${sessionId} failed: ${(error as Error).message}\n`);
+    if (!res.headersSent) reply(res, 500, { error: 'internal error' });
+  }
 }

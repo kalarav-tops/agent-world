@@ -217,3 +217,9 @@ export interface ShipLogEntry {
   state: 'running' | 'finished' | 'failed';
   exitCode: number | null;
 }
+
+/** One item in a conversation shown as chat. */
+export type ConversationItem =
+  | { kind: 'prompt'; at: string; text: string }
+  | { kind: 'reply'; at: string; text: string }
+  | { kind: 'tool'; at: string; toolUseId: string; tool: string; summary: string; state: 'running' | 'done' | 'error' };

@@ -195,6 +195,20 @@ describe('engine + server against a fixture Claude directory', () => {
     expect(await engine.tick()).toBe(false);
   });
 
+
+  it('serves a live session as chat', async () => {
+    const response = await get(server.port, `/api/conversations/${SESSION_ID}`);
+    expect(response.status).toBe(200);
+    const body = JSON.parse(response.body) as { items: Array<{ kind: string; text?: string }>; live: boolean };
+    expect(body.live).toBe(true);
+    expect(body.items[0]).toMatchObject({ kind: 'prompt', text: 'fix the build' });
+  });
+
+  it('refuses conversations of sessions that are neither live nor launched by the ship', async () => {
+    expect((await get(server.port, '/api/conversations/not-a-session')).status).toBe(404);
+    expect((await get(server.port, '/api/conversations/..%2F..%2Fetc')).status).toBe(404);
+    expect((await get(server.port, `/api/conversations/${SESSION_ID}`, undefined, null)).status).toBe(401);
+  });
   it('removes the continent when the session closes', async () => {
     rmSync(join(claudeDir, 'sessions', `${process.pid}.json`));
     expect(await engine.tick()).toBe(true);
