@@ -19,6 +19,7 @@ import {
   STATION_POSITIONS,
   STATUS_COLORS,
   WAITING_AFTER_MS,
+  TOWER_RADIUS,
 } from '../../src/web/scene/layout';
 import type { ScientistSummary } from '../../src/shared/types';
 
@@ -65,16 +66,17 @@ describe('labGrid', () => {
 });
 
 describe('continentPlacements', () => {
-  it('places the first continent at the centre and keeps continents from overlapping', () => {
+  it('keeps the centre free for the launch tower and keeps continents from overlapping', () => {
     const placements = continentPlacements([3, 40, 1, 8]);
-    expect(placements[0]).toMatchObject({ x: 0, z: 0 });
+    for (const placement of placements) {
+      expect(Math.hypot(placement.x, placement.z)).toBeGreaterThan(placement.radius + TOWER_RADIUS);
+    }
     for (let i = 0; i < placements.length; i += 1) {
       for (let j = i + 1; j < placements.length; j += 1) {
         const left = placements[i];
         const right = placements[j];
         if (!left || !right) throw new Error('missing placement');
-        const distance = Math.hypot(left.x - right.x, left.z - right.z);
-        expect(distance).toBeGreaterThan(left.radius + right.radius);
+        expect(Math.hypot(left.x - right.x, left.z - right.z)).toBeGreaterThan(left.radius + right.radius);
       }
     }
   });

@@ -103,33 +103,28 @@ export function islandRadius(labCount: number, spacing = LAB_SPACING): number {
 }
 
 /**
- * Continent centres: the first at the origin, each next one at the nearest free spot along a
- * golden-angle spiral, so continents never overlap whatever their sizes.
+ * Continent centres around the launch-tower island at the origin, each at the nearest free spot
+ * along a golden-angle spiral, so nothing overlaps whatever its size.
  * @param labCounts - lab count per continent, in display order
  * @param spacings - lab spacing per continent (bigger labs need more), default LAB_SPACING
  * @returns one placement per continent
  */
 export function continentPlacements(labCounts: number[], spacings: number[] = []): Placement[] {
-  const placed: Placement[] = [];
+  const tower: Placement = { x: 0, z: 0, radius: TOWER_RADIUS };
+  const placed: Placement[] = [tower];
   labCounts.forEach((count, index) => {
     const radius = islandRadius(count, spacings[index] ?? LAB_SPACING);
-    if (index === 0) {
-      placed.push({ x: 0, z: 0, radius });
-      return;
-    }
     const angle = index * GOLDEN_ANGLE;
-    for (let distance = radius; ; distance += 2) {
+    for (let distance = radius + TOWER_RADIUS; ; distance += 2) {
       const candidate = { x: Math.cos(angle) * distance, z: Math.sin(angle) * distance, radius };
-      const clear = placed.every(
-        (other) => Math.hypot(other.x - candidate.x, other.z - candidate.z) > (other.radius + radius) * SHORE_REACH + CONTINENT_GAP,
-      );
+      const clear = placed.every((other) => Math.hypot(other.x - candidate.x, other.z - candidate.z) > (other.radius + radius) * SHORE_REACH + CONTINENT_GAP);
       if (clear) {
         placed.push(candidate);
         return;
       }
     }
   });
-  return placed;
+  return placed.slice(1);
 }
 
 /**
@@ -415,3 +410,6 @@ export function sessionLayout(labs: ReadonlyArray<{ id: string; scientists: read
   const spacing = continentSpacing(counts);
   return { spacing, cells: labGrid(labs.length, spacing), scales: counts.map(labScale), types: labs.map((lab) => labTypeFor(lab.id)) };
 }
+
+/** Radius of the launch-tower island at the centre of the world. */
+export const TOWER_RADIUS = 7;
