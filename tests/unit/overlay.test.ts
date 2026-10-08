@@ -204,3 +204,12 @@ describe('old command centre', () => {
     expect(existsSync('src/web/ui/RequestCards.tsx')).toBe(false);
   });
 });
+
+describe('waiting chip', () => {
+  it('leaves out requests that cannot be opened because their session is gone', () => {
+    const labs = [lab()];
+    const gone = { ...askReq, id: 'q9', sessionId: 'gone' } as PendingRequest;
+    const markup = renderToStaticMarkup(createElement(Hud, { world: world(labs), connected: true, now: NOW, focusedSessionId: null, onFocusContinent: () => undefined, onOverview: () => undefined, onCommand: () => undefined, waiting: placeRequests([gone], [session(labs)]), onShowWaiting: () => undefined }));
+    expect(markup).not.toContain('waiting</button>');
+  });
+});

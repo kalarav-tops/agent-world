@@ -53,6 +53,7 @@ export function worldStats(world: WorldSummary, now: number): WorldStats {
  */
 export function Hud({ world, connected, now, focusedSessionId, onFocusContinent, onOverview, onCommand, waiting, onShowWaiting }: HudProps): ReactElement {
   const stats = world ? worldStats(world, now) : null;
+  const openable = waiting.filter((place) => place.labId);
   return (
     <>
       <header className="hud">
@@ -68,12 +69,12 @@ export function Hud({ world, connected, now, focusedSessionId, onFocusContinent,
             <Metric value={stats.edits} noun="edit" />
           </ul>
         )}
-        {stats && (waiting.length > 0 || stats.waiting > 0) && (
+        {stats && (openable.length > 0 || stats.waiting > 0) && (
           <div className="hud__alerts">
-            {waiting.length > 0 && (
+            {openable.length > 0 && (
               <button type="button" className="hud__chip hud__chip--asking" onClick={onShowWaiting}>
                 <span className="status-dot status-dot--asking" aria-hidden="true" />
-                {waiting.length} waiting
+                {openable.length} waiting
               </button>
             )}
             {stats.waiting > 0 && (

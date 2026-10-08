@@ -10,7 +10,7 @@ import { ReplayBar, type ReplaySpeed } from './ui/ReplayBar';
 import { ViewControls } from './ui/ViewControls';
 import { useControlAccess } from './state/control';
 import { placeRequests } from './state/requests';
-import { placeReducer, showsWorld, veilOpacity, warpPhase, type Place, type PlaceAction } from './state/place';
+import { cameraCue, placeReducer, showsWorld, veilOpacity, type Place, type PlaceAction } from './state/place';
 import { ShipScene } from './ship/ShipScene';
 import { Icon } from './ui/icons';
 import { LaunchScreen } from './ship/LaunchScreen';
@@ -142,7 +142,7 @@ export function App(): ReactElement {
 
   useLanding(place, selectLab);
   const atWorld = showsWorld(place, clock, reducedMotion);
-  const rising = place.kind === 'warping-in' && warpPhase(place, clock, reducedMotion)?.phase === 'rise';
+  const cue = cameraCue(place, clock, reducedMotion);
 
   const replayStates = replay.atMs !== null && detail && selection ? { ...selection, states: replayAt(detail.timeline, replay.atMs) } : null;
 
@@ -167,7 +167,7 @@ export function App(): ReactElement {
                 onFocusContinent={focusContinent}
                 onClearSelection={clearSelection}
                 waiting={places.length > 0}
-                rising={rising}
+                cameraCue={cue}
                 onEnterShip={enterShip}
               />
             )}
@@ -267,7 +267,7 @@ export function App(): ReactElement {
           {waitingPlace && (
             <button type="button" className="hud__chip hud__chip--asking ship-overlay__waiting" onClick={goToWaiting}>
               <span className="status-dot status-dot--asking" aria-hidden="true" />
-              {places.length} waiting
+              {places.filter((candidate) => candidate.labId).length} waiting
             </button>
           )}
         </div>

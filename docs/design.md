@@ -81,7 +81,7 @@ server (Node, 127.0.0.1 only)
   normalize  → WorldEvent[]          (pure)
   world      → reduce into Session   (pure)
   engine     → poll loop, subagent discovery, change detection
-  http       → static UI, /api/world, /api/labs/:sid/:labId, /api/control, /ws (all API paths need the access key)
+  http       → static UI, /api/world, /api/labs/:sid/:labId, /api/conversations/:sid, /api/control, /api/projects, /api/launches, /api/runs, /api/explanations, /ws (all API paths need the access key)
    │  WebSocket: world summary on connect and on every change
    ▼
 browser (React + React Three Fiber)
@@ -151,7 +151,7 @@ Limits: launches and replies share the run limit; prompts ≤ 20,000 chars, no `
 - **Hook channel.** `~/.agent-world/server.json` is written to a temporary file (mode 600) and renamed into place. Its folder is forced to mode 700 even when it already exists. The file is removed on exit, SIGINT, SIGTERM, SIGHUP and uncaught exceptions. The hook trusts the file only if `lstat` shows a regular file you own with no group/other bits, the pid inside is alive, and (on Linux) its start time still matches the one recorded, so a reused pid is not trusted. The hook never sends the key: each request carries a fresh nonce and `HMAC-SHA256(key, "hook:"+nonce)`. The server returns `x-agent-world-proof: HMAC-SHA256(key, "server:"+nonce)`, and the hook ignores any reply without a valid proof. Its first request (`GET /api/control`) carries no data, so the tool input goes only to a server that has already proved itself. A program squatting on the port learns nothing and can't forge an allow. The hook withdraws its request on SIGTERM, SIGINT and SIGHUP.
 - **`--open`.** The browser is pointed at `~/.agent-world/open.html` (mode 600), which forwards to the keyed link, so the key never appears in a process's command line (`/proc/*/cmdline` is world-readable). The page is removed on exit.
 - Shutdown calls `closeAllConnections()`, so open hook long-polls can't hold it up.
-- Control endpoints also need a JSON content type and refuse foreign origins. `claude` is spawned with an argument array, never a shell; working folders come from Claude Code's session registry, never from the browser.
+- Control endpoints also need a JSON content type and refuse foreign origins. `claude` is spawned with an argument array, never a shell; working folders come from Claude Code's session registry or the server's own project list (picked by id), never from the browser.
 - A route that throws answers 500 with no details (logged to stderr) instead of leaving the request hanging.
 
 ## Performance

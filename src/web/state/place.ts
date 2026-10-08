@@ -91,3 +91,16 @@ export function veilOpacity(place: Place, at: number, reducedMotion: boolean): n
   if (reducedMotion) return 1 - Math.abs(2 * phase.progress - 1);
   return place.kind === 'warping-in' ? 1 - phase.progress : phase.progress;
 }
+
+/**
+ * Which tower move the world camera should make: up it as the warp to the ship starts, down it as
+ * the warp back ends. Reduced motion has neither.
+ * @param place - current place
+ * @param at - current time
+ * @param reducedMotion - whether the person prefers reduced motion
+ * @returns the move, or null
+ */
+export function cameraCue(place: Place, at: number, reducedMotion: boolean): 'rise' | 'descend' | null {
+  if (reducedMotion || warpPhase(place, at, reducedMotion)?.phase !== 'rise') return null;
+  return place.kind === 'warping-in' ? 'rise' : 'descend';
+}

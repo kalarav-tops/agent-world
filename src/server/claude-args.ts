@@ -126,6 +126,6 @@ export function launchArgs(request: LaunchRequest): string[] {
  * @returns name
  */
 export function sessionName(prompt: string): string {
-  const line = prompt.split('\n').map((candidate) => candidate.trim()).find(Boolean) ?? '';
-  return line.length > 60 ? `${line.slice(0, 59)}…` : line;
+  const line = Array.from(prompt.split('\n').map((candidate) => candidate.trim()).find(Boolean) ?? '');
+  return line.length > 60 ? `${line.slice(0, 59).join('')}…` : line.join('');
 }

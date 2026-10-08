@@ -39,10 +39,11 @@ export function useProjects(enabled: boolean): { projects: ProjectView[]; error:
  * @returns items and an error
  */
 export function useConversation(sessionId: string | null, live: boolean): { items: ConversationItem[]; error: string | null } {
-  const [items, setItems] = useState<ConversationItem[]>([]);
+  const [loaded, setLoaded] = useState<LoadedConversation>({ sessionId: null, items: [] });
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!sessionId) return undefined;
+    setError(null);
     let stopped = false;
     const load = (): void => {
       apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}`)
@@ -50,7 +51,7 @@ export function useConversation(sessionId: string | null, live: boolean): { item
           const body = (await response.json()) as { items?: ConversationItem[]; error?: string };
           if (stopped) return;
           if (response.ok) {
-            setItems(body.items ?? []);
+            setLoaded({ sessionId, items: body.items ?? [] });
             setError(null);
           } else {
             setError(response.status === 404 ? body.error ?? 'This conversation is not available.' : `Could not read it (${response.status}).`);
@@ -68,5 +69,22 @@ export function useConversation(sessionId: string | null, live: boolean): { item
       if (timer) clearInterval(timer);
     };
   }, [sessionId, live]);
-  return { items, error };
+  return { items: conversationFor(loaded, sessionId), error };
+}
+
+/** A conversation and the session it was loaded for. */
+interface LoadedConversation {
+  sessionId: string | null;
+  items: ConversationItem[];
+}
+
+/**
+ * The items to show for a session: none until its own conversation has loaded, so switching from
+ * one conversation to another never shows the previous one under the new title.
+ * @param loaded - the last conversation loaded
+ * @param sessionId - the session being shown
+ * @returns items
+ */
+export function conversationFor(loaded: LoadedConversation, sessionId: string | null): ConversationItem[] {
+  return loaded.sessionId === sessionId ? loaded.items : [];
 }

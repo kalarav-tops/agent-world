@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Conversation } from '../../src/web/ui/Conversation';
 import { HistoryScreen } from '../../src/web/ship/HistoryScreen';
-import { chooseProject } from '../../src/web/ship/LaunchScreen';
+import { chooseProject, LaunchScreen } from '../../src/web/ship/LaunchScreen';
+import { conversationFor } from '../../src/web/state/ship';
 import type { ShipLogEntry } from '../../src/shared/types';
 
 const AT = '2026-10-08T10:00:00.000Z';
@@ -32,7 +33,8 @@ describe('HistoryScreen', () => {
     expect(markup).toContain('Add retries');
     expect(markup).toContain('Running');
     expect(markup).toContain('Failed (exit 2)');
-    expect(markup).toContain('Reply to');
+    expect(markup).toContain('Reply · Add retries');
+    expect(markup).not.toContain('Reply to');
   });
 
   it('says when nothing has been launched yet', () => {
@@ -51,5 +53,20 @@ describe('chooseProject', () => {
     expect(chooseProject(projects, 'gone')).toBe('a');
     expect(chooseProject(projects, '')).toBe('a');
     expect(chooseProject([], 'gone')).toBe('');
+  });
+});
+
+describe('LaunchScreen', () => {
+  it('explains an empty project list instead of showing an empty picker', () => {
+    const markup = renderToStaticMarkup(createElement(LaunchScreen, { access: { enabled: true }, onLaunched: () => undefined }));
+    expect(markup).toContain('No projects yet');
+  });
+});
+
+describe('conversationFor', () => {
+  it('shows a conversation only for the session it was loaded for', () => {
+    const loaded = { sessionId: 's1', items: [{ kind: 'reply' as const, at: AT, text: 'old' }] };
+    expect(conversationFor(loaded, 's1')).toHaveLength(1);
+    expect(conversationFor(loaded, 's2')).toEqual([]);
   });
 });

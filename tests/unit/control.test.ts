@@ -12,6 +12,7 @@ describe('claude arguments', () => {
   });
 
   it('names a session after the first line of its prompt, shortened', () => {
+    expect(sessionName(`${'a'.repeat(58)}😀😀 more`)).toBe(`${'a'.repeat(58)}😀…`);
     expect(sessionName(`${'a'.repeat(80)}\nmore`)).toBe(`${'a'.repeat(59)}…`);
     expect(sessionName('\n\n  Fix it  \n')).toBe('Fix it');
   });

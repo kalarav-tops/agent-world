@@ -39,7 +39,7 @@ interface WorldSceneProps {
   onFocusContinent: (sessionId: string) => void;
   onClearSelection: () => void;
   waiting: boolean;
-  rising: boolean;
+  cameraCue: 'rise' | 'descend' | null;
   onEnterShip: () => void;
 }
 
@@ -108,7 +108,7 @@ export function WorldScene(props: WorldSceneProps): ReactElement {
               );
             })}
             </Suspense>
-            <FocusControls focus={props.focus} reducedMotion={props.reducedMotion} handle={props.cameraHandle} rising={props.rising} />
+            <FocusControls focus={props.focus} reducedMotion={props.reducedMotion} handle={props.cameraHandle} cue={props.cameraCue} />
           <DebugHandle />
           </Canvas>
         </LabelLayerContext.Provider>
@@ -137,11 +137,11 @@ function DebugHandle(): null {
 
 /**
  * Orbit/zoom/pan controls that glide to a new focus whenever its key changes, and up the launch
- * tower when the warp to the ship begins.
- * @param props - focus, motion preference, camera handle and whether the warp's rise is on
+ * tower when the warp to the ship begins, and down it when the warp back lands.
+ * @param props - focus, motion preference, camera handle and the tower move, if any
  * @returns the controls
  */
-function FocusControls({ focus, reducedMotion, handle, rising }: { focus: CameraFocus; reducedMotion: boolean; handle: CameraHandle; rising: boolean }): ReactElement {
+function FocusControls({ focus, reducedMotion, handle, cue }: { focus: CameraFocus; reducedMotion: boolean; handle: CameraHandle; cue: 'rise' | 'descend' | null }): ReactElement {
   const controls = useRef<ComponentRef<typeof CameraControls>>(null);
 
   useEffect(() => {
@@ -157,8 +157,15 @@ function FocusControls({ focus, reducedMotion, handle, rising }: { focus: Camera
   }, [focus, reducedMotion]);
 
   useEffect(() => {
-    if (rising) void controls.current?.setLookAt(0, 30, 6, 0, 28, 0, !reducedMotion);
-  }, [rising, reducedMotion]);
+    const camera = controls.current;
+    if (!camera || !cue) return;
+    if (cue === 'rise') {
+      void camera.setLookAt(0, 30, 6, 0, 28, 0, true);
+      return;
+    }
+    void camera.setLookAt(0, 30, 6, 0, 28, 0, false);
+    void camera.setLookAt(focus.x, focus.distance * 0.55, focus.z + focus.distance, focus.x, 0.6, focus.z, true);
+  }, [cue]);
 
   return <CameraControls ref={controls} makeDefault minDistance={6} maxDistance={600} maxPolarAngle={Math.PI * 0.46} smoothTime={0.35} />;
 }

@@ -124,7 +124,7 @@ To answer agents from the world, print the hook settings and merge them into `~/
 node dist/server/cli.js hooks
 ```
 
-The hook does nothing unless Agent World is running with `--allow-control`. Otherwise it exits at once and Claude Code behaves as before. If no cards appear, Claude Code may not find `node` on its `PATH`; put the full path to `node` in the hook command.
+The hook does nothing unless Agent World is running with `--allow-control`. Otherwise it exits at once and Claude Code behaves as before. If a waiting agent never shows up as **N waiting**, Claude Code may not find `node` on its `PATH`; put the full path to `node` in the hook command.
 
 Good to know:
 
@@ -147,7 +147,7 @@ Good to know:
 - **Stale answers are refused.** An answer counts only while the agent's hook is still waiting for it.
 - **Ship history.** Launches and replies are listed in `~/.agent-world/ship-log.json` (only you can read it) with a 280-character prompt preview, never the full prompt. Delete the file to clear the history.
 - **Projects by id.** The ship picks a project from a list the server builds; the browser never sends a folder path.
-- **No shell.** `claude` is launched with an argument list, in the working folder Claude Code's own session registry reports, never one sent by the browser.
+- **No shell.** `claude` is launched with an argument list, in a working folder the server chose itself (a live session's folder from Claude Code's registry, or a project folder from its own list, picked by id), never one sent by the browser.
 - **Key exposure.** `--open` goes through a private page in `~/.agent-world`, so the key never appears on a command line. The key does end up in your browser history as part of the link; on a shared login, stop Agent World when you're done, which retires the key.
 - **Don't expose the port.** Your transcripts contain your code and prompts.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeReducer, REDUCED_WARP_MS, showsWorld, veilOpacity, warpDuration, warpPhase, type Place } from '../../src/web/state/place';
+import { cameraCue, placeReducer, REDUCED_WARP_MS, showsWorld, veilOpacity, warpDuration, warpPhase, type Place } from '../../src/web/state/place';
 
 const world: Place = { kind: 'world' };
 
@@ -70,5 +70,15 @@ describe('showsWorld and veilOpacity', () => {
     expect(veilOpacity({ kind: 'warping-out', startedAt: 0, target: null }, 150, false)).toBe(0.5);
     expect(veilOpacity({ kind: 'warping-in', startedAt: 0 }, 150, true)).toBe(1);
     expect(veilOpacity({ kind: 'warping-in', startedAt: 0 }, 0, true)).toBe(0);
+  });
+});
+
+describe('cameraCue', () => {
+  it('rises up the tower on the way out and comes down it on the way back', () => {
+    expect(cameraCue({ kind: 'warping-in', startedAt: 0 }, 300, false)).toBe('rise');
+    expect(cameraCue({ kind: 'warping-out', startedAt: 0, target: null }, 2400, false)).toBe('descend');
+    expect(cameraCue({ kind: 'warping-in', startedAt: 0 }, 1000, false)).toBeNull();
+    expect(cameraCue({ kind: 'warping-out', startedAt: 0, target: null }, 200, true)).toBeNull();
+    expect(cameraCue({ kind: 'world' }, 0, false)).toBeNull();
   });
 });

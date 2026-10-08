@@ -33,6 +33,11 @@ describe('placeRequests', () => {
     expect(places[0]).toMatchObject({ labId: 'lab-2', scientistId: null });
   });
 
+  it('never guesses between two asking agents for a question without a tool call id', () => {
+    const places = placeRequests([question()], [session([scientist('a', 'asking', 'AskUserQuestion'), scientist('b', 'asking', 'AskUserQuestion')])]);
+    expect(places[0]).toMatchObject({ labId: 'lab-2', scientistId: null });
+  });
+
   it('keeps a request whose session is not in the world, with no lab', () => {
     expect(placeRequests([question({ sessionId: 'gone' })], [])[0]).toMatchObject({ sessionId: 'gone', labId: null, scientistId: null });
   });

@@ -69,6 +69,7 @@ export function LaunchScreen({ access, onLaunched }: { access: ControlAccess; on
         </select>
       </label>
       {listError && <p className="notice-inline notice-inline--error">{listError}</p>}
+      {!listError && !projects.length && <p className="muted">No projects yet: open Claude Code in a folder first, and it will be listed here.</p>}
       <div className="screen__row">
         <label className="field">
           <span className="field__label">Permissions</span>

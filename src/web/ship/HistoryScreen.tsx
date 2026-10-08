@@ -40,7 +40,7 @@ export function HistoryScreen({ runs, selectedId, onSelect, onGoToLab, sessions,
                 <button type="button" className="row" aria-pressed={run.id === selected?.id} onClick={() => onSelect(run.id)}>
                   <span className="row__main">
                     <span className={`status-dot status-dot--${dotFor(run)}`} aria-hidden="true" />
-                    {run.kind === 'reply' ? 'Reply to ' : ''}
+                    {run.kind === 'reply' ? 'Reply · ' : ''}
                     {preview(run.promptPreview, 48)}
                   </span>
                   <span className="row__sub">
