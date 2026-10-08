@@ -43,8 +43,16 @@ export function handleControl(req: IncomingMessage, res: ServerResponse, path: s
     control.cancel(cancelMatch[1] ?? '');
     return reply(res, 200, { result: true }), true;
   }
+  if (path === '/api/projects' && req.method === 'GET') {
+    void control
+      .projects()
+      .then((result) => (result.ok ? reply(res, 200, { result: result.value }) : reply(res, result.status, { error: result.reason })))
+      .catch((error: unknown) => failed(res, reply, path, error));
+    return true;
+  }
   const routes: Array<[RegExp, string, (match: RegExpMatchArray, body: Record<string, unknown>) => Promise<ControlResult<unknown>> | ControlResult<unknown>]> = [
     [/^\/api\/runs$/, 'POST', (_match, body) => control.startRun(body)],
+    [/^\/api\/launches$/, 'POST', (_match, body) => control.launch(body)],
     [/^\/api\/explanations$/, 'POST', (_match, body) => control.explain(body)],
     [/^\/api\/hook-requests$/, 'POST', (_match, body) => control.raise(body)],
     [/^\/api\/requests\/([\w-]{1,100})\/answers$/, 'POST', (match, body) => control.answer(match[1] ?? '', body)],

@@ -3,13 +3,14 @@ import { createServer, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ControlService } from '../../src/server/control';
 import type { ClaudeRunner } from '../../src/server/claude-runner';
 import { Engine } from '../../src/server/engine';
 import { startServer, type RunningServer } from '../../src/server/http';
 import { writeServerFile } from '../../src/server/server-file';
+import { ProjectCatalog, projectId } from '../../src/server/projects';
 import type { WorldSummary } from '../../src/shared/types';
 import { assistantText, humanPrompt, setFixtureBase } from '../fixtures/lines';
 
@@ -36,6 +37,7 @@ const fakeRunner: ClaudeRunner = {
 };
 
 let claudeDir: string;
+let appDir: string;
 let webDir: string;
 let server: RunningServer;
 let off: RunningServer;
@@ -105,16 +107,18 @@ const post = (path: string, body: unknown, token = TOKEN) =>
 
 beforeAll(async () => {
   claudeDir = mkdtempSync(join(tmpdir(), 'ctl-claude-'));
+  appDir = mkdtempSync(join(tmpdir(), 'ctl-app-'));
   webDir = mkdtempSync(join(tmpdir(), 'ctl-web-'));
   writeFileSync(join(webDir, 'index.html'), '<html></html>');
   mkdirSync(join(claudeDir, 'sessions'));
-  writeFileSync(join(claudeDir, 'sessions', 'a.json'), JSON.stringify({ pid: process.pid, sessionId: SESSION, cwd: '/work/app', startedAt: 1 }));
+  writeFileSync(join(claudeDir, 'sessions', 'a.json'), JSON.stringify({ pid: process.pid, sessionId: SESSION, cwd: appDir, startedAt: 1 }));
   const project = join(claudeDir, 'projects', '-work-app');
   mkdirSync(project, { recursive: true });
   writeFileSync(join(project, `${SESSION}.jsonl`), [humanPrompt('Fix the build'), assistantText('Fixed')].map((line) => `${JSON.stringify(line)}\n`).join(''));
   const engine = new Engine({ claudeDir });
   await engine.tick();
-  server = await startServer({ engine, port: 0, webDir, control: new ControlService({ enabled: true, engine, runner: fakeRunner }), token: TOKEN });
+  const projects = new ProjectCatalog({ claudeDir, live: () => engine.liveProjects() });
+  server = await startServer({ engine, port: 0, webDir, control: new ControlService({ enabled: true, engine, runner: fakeRunner, projects, logFile: join(claudeDir, 'ship-log.json') }), token: TOKEN });
   off = await startServer({ engine, port: 0, webDir, control: new ControlService({ enabled: false, engine, runner: fakeRunner }), token: OFF_TOKEN });
 });
 
@@ -122,6 +126,7 @@ afterAll(async () => {
   await server.close();
   await off.close();
   rmSync(claudeDir, { recursive: true, force: true });
+  rmSync(appDir, { recursive: true, force: true });
   rmSync(webDir, { recursive: true, force: true });
 });
 
@@ -156,7 +161,7 @@ describe('command centre access', () => {
     const response = await call(
       off.port,
       '/api/runs',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: SESSION, prompt: 'hi', permissionMode: 'default', mode: 'new' }) },
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: SESSION, prompt: 'hi', permissionMode: 'default' }) },
       OFF_TOKEN,
     );
     expect(response.status).toBe(403);
@@ -164,34 +169,51 @@ describe('command centre access', () => {
 });
 
 describe('prompt runs', () => {
-  it('starts a new task in the session project folder taken from the registry', async () => {
-    const response = await post('/api/runs', { sessionId: SESSION, prompt: 'Add a README', permissionMode: 'acceptEdits', mode: 'new', cwd: '/etc' });
+  it('lists projects by id without paths', async () => {
+    const response = await call(server.port, '/api/projects');
     expect(response.status).toBe(200);
-    const start = calls.filter((entry) => entry.kind === 'start').at(-1);
-    expect(start).toEqual({ kind: 'start', args: ['-p', '--permission-mode', 'acceptEdits', 'Add a README'], cwd: '/work/app' });
+    const projects = response.body.result as Array<Record<string, unknown>>;
+    expect(projects[0]).toEqual({ id: projectId(appDir), name: basename(appDir), branch: expect.any(String), live: true });
+    expect(JSON.stringify(response.body)).not.toContain(appDir);
+    expect((await call(off.port, '/api/projects', {}, OFF_TOKEN)).body).toEqual({ result: [] });
   });
 
-  it('continues a session on a fork', async () => {
-    await post('/api/runs', { sessionId: SESSION, prompt: 'Now add tests', permissionMode: 'default', mode: 'continue' });
-    expect(calls.at(-1)?.args).toEqual(['-p', '--resume', SESSION, '--fork-session', '--permission-mode', 'default', 'Now add tests']);
+  it('launches a fresh conversation in the chosen project folder', async () => {
+    const response = await post('/api/launches', { projectId: projectId(appDir), prompt: 'Add a README', permissionMode: 'acceptEdits', cwd: '/etc' });
+    expect(response.status).toBe(200);
+    const start = calls.filter((entry) => entry.kind === 'start').at(-1);
+    expect(start?.cwd).toBe(appDir);
+    expect(start?.args).toContain('--session-id');
+  });
+
+  it('refuses a launch with an unknown project or a bad prompt', async () => {
+    expect((await post('/api/launches', { projectId: 'nope', prompt: 'x', permissionMode: 'default' })).status).toBe(404);
+    expect((await post('/api/launches', { projectId: projectId(appDir), prompt: '/compact', permissionMode: 'default' })).status).toBe(400);
+  });
+
+  it('continues a session on a fork with its own session id', async () => {
+    await post('/api/runs', { sessionId: SESSION, prompt: 'Now add tests', permissionMode: 'default' });
+    const args = calls.at(-1)?.args ?? [];
+    expect(args.slice(0, 5)).toEqual(['-p', '--resume', SESSION, '--fork-session', '--session-id']);
+    expect(args.slice(6)).toEqual(['--permission-mode', 'default', 'Now add tests']);
   });
 
   it('shows runs in the world', async () => {
     const world = (await call(server.port, '/api/world')).body as unknown as WorldSummary;
-    expect(world.control?.runs.map((run) => run.prompt)).toEqual(['Now add tests', 'Add a README']);
+    expect(world.control?.runs.map((run) => [run.kind, run.promptPreview])).toEqual([['reply', 'Now add tests'], ['launch', 'Add a README']]);
   });
 
   it('validates the prompt, the mode and the session', async () => {
-    expect((await post('/api/runs', { sessionId: SESSION, prompt: '/compact', permissionMode: 'default', mode: 'new' })).status).toBe(400);
-    expect((await post('/api/runs', { sessionId: SESSION, prompt: 'x', permissionMode: 'yolo', mode: 'new' })).status).toBe(400);
-    expect((await post('/api/runs', { sessionId: 'ghost', prompt: 'x', permissionMode: 'default', mode: 'new' })).status).toBe(404);
-    expect((await post('/api/runs', { sessionId: '../etc', prompt: 'x', permissionMode: 'default', mode: 'new' })).status).toBe(404);
+    expect((await post('/api/runs', { sessionId: SESSION, prompt: '/compact', permissionMode: 'default' })).status).toBe(400);
+    expect((await post('/api/runs', { sessionId: SESSION, prompt: 'x', permissionMode: 'yolo' })).status).toBe(400);
+    expect((await post('/api/runs', { sessionId: 'ghost', prompt: 'x', permissionMode: 'default' })).status).toBe(404);
+    expect((await post('/api/runs', { sessionId: '../etc', prompt: 'x', permissionMode: 'default' })).status).toBe(404);
   });
 
   it('limits how many runs go at once', async () => {
-    const third = await post('/api/runs', { sessionId: SESSION, prompt: 'third', permissionMode: 'default', mode: 'new' });
+    const third = await post('/api/runs', { sessionId: SESSION, prompt: 'third', permissionMode: 'default' });
     expect(third.status).toBe(200);
-    const fourth = await post('/api/runs', { sessionId: SESSION, prompt: 'fourth', permissionMode: 'default', mode: 'new' });
+    const fourth = await post('/api/runs', { sessionId: SESSION, prompt: 'fourth', permissionMode: 'default' });
     expect(fourth.status).toBe(429);
   });
 });
@@ -206,7 +228,7 @@ describe('explanations', () => {
     const ask = calls.at(-1);
     expect(ask?.kind).toBe('ask');
     expect(ask?.args.slice(0, 7)).toEqual(['-p', '--resume', SESSION, '--fork-session', '--no-session-persistence', '--tools', '']);
-    expect(ask?.cwd).toBe('/work/app');
+    expect(ask?.cwd).toBe(appDir);
   });
 
   it('reports an unknown lab', async () => {

@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { ControlRun, ControlState, PendingRequest, SessionInfo } from '../shared/types.js';
+import { statSync } from 'node:fs';
+import type { ControlState, PendingRequest, ProjectView, SessionInfo, ShipLogEntry } from '../shared/types.js';
 import { summarizeTool } from '../shared/tools.js';
-import { askArgs, explanationQuestion, PERMISSION_MODES, runArgs, validatePrompt, type PermissionMode } from './claude-args.js';
+import { askArgs, EFFORTS, explanationQuestion, launchArgs, MODELS, PERMISSION_MODES, runArgs, validatePrompt } from './claude-args.js';
 import type { ClaudeRunner } from './claude-runner.js';
 import type { Engine } from './engine.js';
 import { parseQuestions, permissionDetail, RequestStore, type RequestAnswer } from './requests.js';
+import { toView, type KnownProject, type ProjectCatalog } from './projects.js';
+import { previewOf, readShipLog, SHIP_LOG_LIMIT, writeShipLog } from './ship-log.js';
 
 /** Settings for the command centre. */
 export interface ControlOptions {
@@ -15,6 +18,9 @@ export interface ControlOptions {
   requestLifetimeMs?: number;
   askTimeoutMs?: number;
   runTimeoutMs?: number;
+  projects?: ProjectCatalog;
+  logFile?: string;
+  newId?: () => string;
 }
 
 /** Outcome of a command-centre action: ok with data, or a reason and HTTP status. */
@@ -22,7 +28,6 @@ export type ControlResult<T> = { ok: true; value: T } | { ok: false; status: num
 
 const MAX_RUNNING = 3;
 const MAX_ASKING = 2;
-const MAX_RUNS_KEPT = 20;
 const DEFAULT_REQUEST_LIFETIME_MS = 130_000;
 const DEFAULT_ASK_TIMEOUT_MS = 240_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
@@ -35,7 +40,7 @@ const ID = /^[\w-]{1,100}$/;
  */
 export class ControlService {
   readonly requests: RequestStore;
-  private readonly runs: Array<ControlRun & { output: () => string }> = [];
+  private log: ShipLogEntry[];
   private readonly running = new Set<string>();
   private readonly asking = new Set<string>();
   private readonly listeners = new Set<() => void>();
@@ -47,6 +52,7 @@ export class ControlService {
   constructor(private readonly options: ControlOptions) {
     this.now = options.now ?? Date.now;
     this.requests = new RequestStore(this.now, () => this.notify());
+    this.log = options.enabled && options.logFile ? readShipLog(options.logFile) : [];
   }
 
   /** Whether control actions are allowed at all. */
@@ -72,17 +78,17 @@ export class ControlService {
     return {
       enabled: this.enabled,
       requests: this.enabled ? this.requests.list(this.now()) : [],
-      runs: this.runs.map(({ output: _output, ...run }) => run),
+      runs: this.log.slice(0, RUNS_IN_SUMMARY),
     };
   }
 
   /**
-   * Start a prompt run: a new task in a session's project folder, or a continuation of the session
-   * on a fork.
-   * @param body - request body from the browser
-   * @returns the run, or why it was refused
+   * Continue a session's work on a fork, from a lab panel's reply box. The fork gets a session id
+   * chosen here, so the ship log can show its conversation.
+   * @param body - `{sessionId, prompt, permissionMode}` from the browser
+   * @returns the logged run, or why it was refused
    */
-  startRun(body: Record<string, unknown>): ControlResult<ControlRun> {
+  startRun(body: Record<string, unknown>): ControlResult<ShipLogEntry> {
     const guard = this.guard();
     if (guard) return guard;
     const session = this.liveSession(body.sessionId);
@@ -91,11 +97,62 @@ export class ControlService {
     if (!check.ok) return { ok: false, status: 400, reason: check.reason };
     const mode = PERMISSION_MODES.find((candidate) => candidate === body.permissionMode);
     if (!mode) return { ok: false, status: 400, reason: 'Pick a permission mode.' };
-    if (body.mode !== 'new' && body.mode !== 'continue') return { ok: false, status: 400, reason: 'Choose to start a new task or continue the session.' };
-    if (this.running.size >= MAX_RUNNING) {
-      return { ok: false, status: 429, reason: `At most ${MAX_RUNNING} runs at a time; wait for one to finish.` };
+    if (this.running.size >= MAX_RUNNING) return this.busy();
+    const id = this.newId();
+    const forkId = this.newId();
+    const args = runArgs({ prompt: check.prompt, permissionMode: mode, resumeSessionId: session.sessionId, newSessionId: forkId });
+    const name = session.cwd.split(/[\\/]/).pop() || session.cwd;
+    const entry = this.track(id, args, session.cwd, { kind: 'reply', sessionId: forkId, projectId: null, projectName: name, promptPreview: previewOf(check.prompt), model: '', effort: '', permissionMode: mode });
+    return { ok: true, value: entry };
+  }
+
+  /**
+   * Start a fresh conversation from the ship in a project the server knows, by id.
+   * @param body - `{projectId, prompt, permissionMode, model?, effort?}`
+   * @returns the launch id and the new session id, or why it was refused
+   */
+  async launch(body: Record<string, unknown>): Promise<ControlResult<{ launchId: string; sessionId: string }>> {
+    const guard = this.guard();
+    if (guard) return guard;
+    const project = typeof body.projectId === 'string' ? await this.options.projects?.find(body.projectId) : undefined;
+    if (!project) return { ok: false, status: 404, reason: 'That project is not in the list; reload it.' };
+    const check = validatePrompt(body.prompt);
+    if (!check.ok) return { ok: false, status: 400, reason: check.reason };
+    const mode = PERMISSION_MODES.find((candidate) => candidate === body.permissionMode);
+    if (!mode) return { ok: false, status: 400, reason: 'Pick a permission mode.' };
+    const model = pick(MODELS, body.model);
+    if (model === null) return { ok: false, status: 400, reason: 'Pick a model from the list.' };
+    const effort = pick(EFFORTS, body.effort);
+    if (effort === null) return { ok: false, status: 400, reason: 'Pick an effort level from the list.' };
+    if (!isFolder(project.cwd)) {
+      this.options.projects?.invalidate();
+      return { ok: false, status: 404, reason: 'That project folder no longer exists.' };
     }
-    return { ok: true, value: this.launch(session, check.prompt, mode, body.mode === 'continue') };
+    if (this.running.size >= MAX_RUNNING) return this.busy();
+    const launchId = this.newId();
+    const sessionId = this.newId();
+    const args = launchArgs({ sessionId, prompt: check.prompt, permissionMode: mode, ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+    this.track(launchId, args, project.cwd, launchEntry(project, sessionId, check.prompt, mode, model ?? '', effort ?? ''));
+    return { ok: true, value: { launchId, sessionId } };
+  }
+
+  /**
+   * Projects a fresh conversation can start in, without paths.
+   * @returns the list; empty when control is off
+   */
+  async projects(): Promise<ControlResult<ProjectView[]>> {
+    if (!this.enabled || !this.options.projects) return { ok: true, value: [] };
+    return { ok: true, value: (await this.options.projects.list()).map(toView) };
+  }
+
+  /**
+   * Whether the ship log has a conversation with this session id; such sessions stay readable
+   * after they stop.
+   * @param sessionId - session id
+   * @returns true when logged
+   */
+  hasLogged(sessionId: string): boolean {
+    return this.log.some((entry) => entry.sessionId === sessionId);
   }
 
   /**
@@ -221,40 +278,59 @@ export class ControlService {
   }
 
   /**
-   * Launch a run and track it until it ends.
-   * @param session - session whose project folder (and context, when continuing) is used
-   * @param prompt - checked prompt
-   * @param mode - permission mode
-   * @param resume - continue the session on a fork
-   * @returns the run
+   * Start `claude`, log the run, and update the log when it ends.
+   * @param id - log entry id
+   * @param args - claude arguments
+   * @param cwd - working folder from the registry or the project catalogue
+   * @param fields - what to log about it
+   * @returns the logged entry
    */
-  private launch(session: SessionInfo, prompt: string, mode: PermissionMode, resume: boolean): ControlRun {
+  private track(id: string, args: string[], cwd: string, fields: LogFields): ShipLogEntry {
     const runner = this.options.runner as ClaudeRunner;
-    const args = resume ? runArgs({ prompt, permissionMode: mode, resumeSessionId: session.sessionId }) : ['-p', '--permission-mode', mode, prompt];
-    const handle = runner.start(args, session.cwd, this.options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS);
-    const run = {
-      id: randomUUID(),
-      sessionId: resume ? session.sessionId : null,
-      cwd: session.cwd,
-      prompt,
-      startedAt: new Date(this.now()).toISOString(),
-      state: 'running' as ControlRun['state'],
-      exitCode: null as number | null,
-      output: handle.output,
-    };
-    this.runs.unshift(run);
-    this.runs.splice(MAX_RUNS_KEPT);
-    this.running.add(run.id);
+    const handle = runner.start(args, cwd, this.options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS);
+    const entry: ShipLogEntry = { ...fields, id, startedAt: new Date(this.now()).toISOString(), endedAt: null, state: 'running', exitCode: null };
+    this.running.add(id);
+    this.record([entry, ...this.log]);
     const finish = (code: number): void => {
-      this.running.delete(run.id);
-      run.state = code === 0 ? 'finished' : 'failed';
-      run.exitCode = code;
-      this.notify();
+      this.running.delete(id);
+      const endedAt = new Date(this.now()).toISOString();
+      this.record(this.log.map((item) => (item.id === id ? { ...item, state: code === 0 ? 'finished' : 'failed', exitCode: code, endedAt } : item)));
     };
     handle.done.then(finish, () => finish(-1));
+    return entry;
+  }
+
+  /**
+   * Replace the log, save it when there is a log file, and tell subscribers. A failed save is
+   * logged and the run goes on.
+   * @param next - new log, newest first
+   */
+  private record(next: ShipLogEntry[]): void {
+    this.log = next.slice(0, SHIP_LOG_LIMIT);
+    if (this.options.logFile) {
+      try {
+        writeShipLog(this.log, this.options.logFile);
+      } catch (error) {
+        process.stderr.write(`agent-world: could not save the ship log: ${(error as Error).message}\n`);
+      }
+    }
     this.notify();
-    const { output: _output, ...visible } = run;
-    return visible;
+  }
+
+  /**
+   * The refusal when the run limit is reached.
+   * @returns a 429 result
+   */
+  private busy(): ControlResult<never> {
+    return { ok: false, status: 429, reason: `At most ${MAX_RUNNING} runs at a time; wait for one to finish.` };
+  }
+
+  /**
+   * A fresh id.
+   * @returns a UUID (or the test's id)
+   */
+  private newId(): string {
+    return (this.options.newId ?? randomUUID)();
   }
 
   /** Tell subscribers that runs or requests changed. */
@@ -279,4 +355,47 @@ function readAnswer(body: Record<string, unknown>, request: PendingRequest): Req
     return [question.question, typeof value === 'string' ? value.trim().slice(0, 2000) : ''];
   });
   return entries.every(([, answer]) => answer) ? { answers: Object.fromEntries(entries) } : null;
+}
+
+const RUNS_IN_SUMMARY = 50;
+
+/** What the caller supplies when logging a run. */
+type LogFields = Omit<ShipLogEntry, 'id' | 'startedAt' | 'endedAt' | 'state' | 'exitCode'>;
+
+/**
+ * The log fields for a fresh launch.
+ * @param project - project it runs in
+ * @param sessionId - its session id
+ * @param prompt - checked prompt
+ * @param mode - permission mode
+ * @param model - model alias or empty
+ * @param effort - effort level or empty
+ * @returns entry fields
+ */
+function launchEntry(project: KnownProject, sessionId: string, prompt: string, mode: string, model: string, effort: string): LogFields {
+  return { kind: 'launch', sessionId, projectId: project.id, projectName: project.name, promptPreview: previewOf(prompt), model, effort, permissionMode: mode };
+}
+
+/**
+ * An optional value from an allow-list.
+ * @param allowed - allowed values
+ * @param value - value from the browser
+ * @returns the value, undefined when absent or empty, or null when not allowed
+ */
+function pick<T extends string>(allowed: readonly T[], value: unknown): T | undefined | null {
+  if (value === undefined || value === '') return undefined;
+  return allowed.find((candidate) => candidate === value) ?? null;
+}
+
+/**
+ * Whether a path is an existing folder.
+ * @param path - folder path from the project catalogue
+ * @returns true when it is a folder
+ */
+function isFolder(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }

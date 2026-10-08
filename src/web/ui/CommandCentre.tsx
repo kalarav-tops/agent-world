@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type KeyboardEvent, type ReactElement } from 'react';
-import type { ControlRun, SessionSummary } from '../../shared/types';
+import type { SessionSummary, ShipLogEntry } from '../../shared/types';
 import { sendControl, type ControlAccess } from '../state/control';
 import { preview, timeAgo } from './format';
 import { Icon } from './icons';
@@ -8,13 +8,12 @@ import { Icon } from './icons';
 interface CommandCentreProps {
   access: ControlAccess;
   sessions: SessionSummary[];
-  runs: ControlRun[];
+  runs: ShipLogEntry[];
   now: number;
   defaultSessionId: string | null;
   onClose: () => void;
 }
 
-type RunMode = 'continue' | 'new';
 type PermissionMode = 'default' | 'acceptEdits' | 'plan';
 
 const PERMISSION_LABELS: Record<PermissionMode, string> = {
@@ -31,7 +30,6 @@ const PERMISSION_LABELS: Record<PermissionMode, string> = {
  */
 export function CommandCentre({ access, sessions, runs, now, defaultSessionId, onClose }: CommandCentreProps): ReactElement {
   const [sessionId, setSessionId] = useState(defaultSessionId ?? sessions[0]?.sessionId ?? '');
-  const [mode, setMode] = useState<RunMode>('continue');
   const [permission, setPermission] = useState<PermissionMode>('default');
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
@@ -43,7 +41,7 @@ export function CommandCentre({ access, sessions, runs, now, defaultSessionId, o
     if (!target || sending) return;
     setSending(true);
     setNotice(null);
-    const reply = await sendControl<ControlRun>(access, '/api/runs', { sessionId, prompt, permissionMode: permission, mode });
+    const reply = await sendControl<ShipLogEntry>(access, '/api/runs', { sessionId, prompt, permissionMode: permission });
     setSending(false);
     if (!reply.ok) {
       setNotice({ kind: 'error', text: reply.error });
@@ -52,7 +50,7 @@ export function CommandCentre({ access, sessions, runs, now, defaultSessionId, o
     setPrompt('');
     setNotice({
       kind: 'done',
-      text: mode === 'continue' ? 'Sent. A copy of the session is working on it and will appear as its own continent.' : 'Started. The new task will appear as its own continent.',
+      text: 'Sent. A copy of the session is working on it and will appear as its own continent.',
     });
   };
 
@@ -93,23 +91,6 @@ export function CommandCentre({ access, sessions, runs, now, defaultSessionId, o
                 ))}
               </select>
             </label>
-            <fieldset className="field">
-              <legend className="field__label">What to do</legend>
-              <label className="choice">
-                <input type="radio" name="mode" checked={mode === 'continue'} onChange={() => setMode('continue')} />
-                <span>
-                  Continue this session's work
-                  <small>Runs on a copy with the full conversation; your open session is not changed.</small>
-                </span>
-              </label>
-              <label className="choice">
-                <input type="radio" name="mode" checked={mode === 'new'} onChange={() => setMode('new')} />
-                <span>
-                  Start a new task in {target?.project ?? 'this project'}
-                  <small>A fresh session in the same folder.</small>
-                </span>
-              </label>
-            </fieldset>
             <label className="field">
               <span className="field__label">Permissions</span>
               <select className="field__input" value={permission} onChange={(event) => setPermission(event.target.value as PermissionMode)}>
@@ -149,9 +130,9 @@ export function CommandCentre({ access, sessions, runs, now, defaultSessionId, o
               {runs.map((run) => (
                 <li key={run.id} className="run">
                   <span className={`run__state run__state--${run.state}`}>{runStateLabel(run)}</span>
-                  <span className="run__prompt">{preview(run.prompt, 70)}</span>
+                  <span className="run__prompt">{preview(run.promptPreview, 70)}</span>
                   <span className="run__meta">
-                    {run.sessionId ? 'Continued session' : 'New task'}, {timeAgo(run.startedAt, now)}
+                    {run.kind === 'reply' ? 'Reply' : 'New conversation'}, {timeAgo(run.startedAt, now)}
                   </span>
                 </li>
               ))}
@@ -168,7 +149,7 @@ export function CommandCentre({ access, sessions, runs, now, defaultSessionId, o
  * @param run - the run
  * @returns label
  */
-function runStateLabel(run: ControlRun): string {
+function runStateLabel(run: ShipLogEntry): string {
   if (run.state === 'running') return 'Running';
   if (run.state === 'finished') return 'Finished';
   return run.exitCode === null ? 'Failed' : `Failed (exit ${run.exitCode})`;

@@ -186,22 +186,11 @@ export type PendingRequest =
   | { id: string; kind: 'question'; sessionId: string; createdAt: string; expiresAt: string; questions: AgentQuestion[] }
   | { id: string; kind: 'permission'; sessionId: string; createdAt: string; expiresAt: string; tool: string; summary: string; detail: string; truncated: boolean };
 
-/** A prompt run started from the command centre. */
-export interface ControlRun {
-  id: string;
-  sessionId: string | null;
-  cwd: string;
-  prompt: string;
-  startedAt: string;
-  state: 'running' | 'finished' | 'failed';
-  exitCode: number | null;
-}
-
 /** Command-centre state streamed with the world. */
 export interface ControlState {
   enabled: boolean;
   requests: PendingRequest[];
-  runs: ControlRun[];
+  runs: ShipLogEntry[];
 }
 
 /** A project a fresh conversation can start in, as the browser sees it (never a path). */

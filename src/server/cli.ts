@@ -11,6 +11,8 @@ import { randomBytes } from 'node:crypto';
 import { ControlService } from './control.js';
 import { findClaude, processRunner } from './claude-runner.js';
 import { removeLauncher, removeServerFile, writeLauncher, writeServerFile } from './server-file.js';
+import { ProjectCatalog } from './projects.js';
+import { SHIP_LOG_FILE } from './ship-log.js';
 
 const DEFAULT_PORT = 4317;
 const DEFAULT_POLL_MS = 750;
@@ -70,7 +72,8 @@ async function main(): Promise<void> {
   const allowControl = values['allow-control'] === true;
   const claudeBin = allowControl ? findClaude(values['claude-bin']) : null;
   const token = randomBytes(24).toString('hex');
-  const control = new ControlService({ enabled: allowControl, engine, runner: claudeBin ? processRunner(claudeBin) : null });
+  const projects = new ProjectCatalog({ claudeDir, live: () => engine.liveProjects() });
+  const control = new ControlService({ enabled: allowControl, engine, runner: claudeBin ? processRunner(claudeBin) : null, projects, logFile: SHIP_LOG_FILE });
   const server = await startServer({ engine, port, webDir, extraOrigins: values['dev-origin'] ?? [], control, token });
   engine.start(pollMs);
   process.on('exit', () => {

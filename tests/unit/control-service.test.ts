@@ -3,6 +3,11 @@ import type { ClaudeRunner } from '../../src/server/claude-runner';
 import { ControlService } from '../../src/server/control';
 import type { Engine } from '../../src/server/engine';
 import type { Lab, SessionInfo } from '../../src/shared/types';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readShipLog } from '../../src/server/ship-log';
+import { ProjectCatalog, projectId } from '../../src/server/projects';
 
 const SESSIONS = ['s1', 's2', 's3'];
 
@@ -39,7 +44,7 @@ function controllableRunner() {
   return { runner, finishRun, finishAsk, asks, stopped: () => stopped };
 }
 
-const run = (prompt: string) => ({ sessionId: 's1', prompt, permissionMode: 'default', mode: 'new' });
+const run = (prompt: string) => ({ sessionId: 's1', prompt, permissionMode: 'default' });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('ControlService', () => {
@@ -47,12 +52,12 @@ describe('ControlService', () => {
     const fake = controllableRunner();
     const control = new ControlService({ enabled: true, engine, runner: fake.runner });
     expect(control.startRun(run('long')).ok).toBe(true);
-    for (let index = 0; index < 25; index += 1) {
+    for (let index = 0; index < 55; index += 1) {
       expect(control.startRun(run(`quick ${index}`)).ok).toBe(true);
       fake.finishRun.at(-1)?.(0);
       await settle();
     }
-    expect(control.state().runs.some((entry) => entry.prompt === 'long')).toBe(false);
+    expect(control.state().runs.some((entry) => entry.promptPreview === 'long')).toBe(false);
     expect(control.startRun(run('second')).ok).toBe(true);
     expect(control.startRun(run('third')).ok).toBe(true);
     expect(control.startRun(run('fourth'))).toMatchObject({ ok: false, status: 429 });
@@ -150,5 +155,85 @@ describe('ControlService', () => {
     expect(control.state().requests[0]).toMatchObject({ truncated: true });
     expect(control.answer(first.value.id, { decision: 'allow' })).toMatchObject({ ok: false, status: 400 });
     expect(control.answer(second.value.id, { decision: 'deny' })).toEqual({ ok: true, value: true });
+  });
+});
+
+
+/**
+ * A control service with a real project folder and a private log file.
+ * @param runner - fake runner
+ * @returns service, project id, log file and the folder to clean up
+ */
+function launchable(runner: ClaudeRunner) {
+  const root = mkdtempSync(join(tmpdir(), 'aw-launch-'));
+  const projectDir = join(root, 'app');
+  mkdirSync(projectDir);
+  const logFile = join(root, 'home', 'ship-log.json');
+  const projects = new ProjectCatalog({ claudeDir: join(root, 'claude'), live: () => [{ cwd: projectDir, branch: 'main' }] });
+  let next = 0;
+  const control = new ControlService({ enabled: true, engine, runner, projects, logFile, newId: () => `00000000-0000-4000-8000-00000000000${next++}` });
+  return { control, id: projectId(projectDir), projectDir, logFile, root };
+}
+
+describe('ControlService.launch', () => {
+  it('starts a fresh conversation in the project folder with its own session id', async () => {
+    const calls: Array<{ args: string[]; cwd: string }> = [];
+    const runner: ClaudeRunner = { ...controllableRunner().runner, start: (args, cwd) => (calls.push({ args, cwd }), { done: new Promise(() => undefined), output: () => '' }) };
+    const { control, id, projectDir, logFile, root } = launchable(runner);
+    const result = await control.launch({ projectId: id, prompt: 'Add retries', permissionMode: 'plan', model: 'haiku', effort: 'low' });
+    expect(result).toEqual({ ok: true, value: { launchId: '00000000-0000-4000-8000-000000000000', sessionId: '00000000-0000-4000-8000-000000000001' } });
+    expect(calls[0]).toEqual({ cwd: projectDir, args: expect.arrayContaining(['--session-id', '00000000-0000-4000-8000-000000000001', '--model', 'haiku', '--effort', 'low']) });
+    expect(JSON.parse(readFileSync(logFile, 'utf8'))[0]).toMatchObject({ kind: 'launch', projectName: 'app', promptPreview: 'Add retries', state: 'running' });
+    expect(control.hasLogged('00000000-0000-4000-8000-000000000001')).toBe(true);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('refuses unknown projects, deleted folders, bad models and bad efforts', async () => {
+    const { control, id, projectDir, root } = launchable(controllableRunner().runner);
+    expect(await control.launch({ projectId: 'ffffffffffffffff', prompt: 'x', permissionMode: 'default' })).toMatchObject({ ok: false, status: 404 });
+    expect(await control.launch({ projectId: id, prompt: 'x', permissionMode: 'default', model: 'gpt' })).toMatchObject({ ok: false, status: 400 });
+    expect(await control.launch({ projectId: id, prompt: 'x', permissionMode: 'default', effort: 'ultra' })).toMatchObject({ ok: false, status: 400 });
+    expect(await control.launch({ projectId: id, prompt: '/compact', permissionMode: 'default' })).toMatchObject({ ok: false, status: 400 });
+    rmSync(projectDir, { recursive: true });
+    expect(await control.launch({ projectId: id, prompt: 'x', permissionMode: 'default' })).toEqual({ ok: false, status: 404, reason: 'That project folder no longer exists.' });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('records how a launch ended', async () => {
+    const fake = controllableRunner();
+    const { control, id, logFile, root } = launchable(fake.runner);
+    await control.launch({ projectId: id, prompt: 'x', permissionMode: 'default' });
+    fake.finishRun[0]?.(2);
+    await settle();
+    expect(readShipLog(logFile)[0]).toMatchObject({ state: 'failed', exitCode: 2 });
+    expect(control.state().runs[0]?.endedAt).not.toBeNull();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('shares the three-run limit with replies', async () => {
+    const { control, id, root } = launchable(controllableRunner().runner);
+    expect(control.startRun(run('a')).ok).toBe(true);
+    expect(control.startRun(run('b')).ok).toBe(true);
+    expect((await control.launch({ projectId: id, prompt: 'c', permissionMode: 'default' })).ok).toBe(true);
+    expect(await control.launch({ projectId: id, prompt: 'd', permissionMode: 'default' })).toMatchObject({ ok: false, status: 429 });
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('ControlService replies and memory-only logs', () => {
+  it('logs a reply with the fork\'s own session id', () => {
+    const starts: string[][] = [];
+    const runner: ClaudeRunner = { ...controllableRunner().runner, start: (args) => (starts.push(args), { done: new Promise(() => undefined), output: () => '' }) };
+    const control = new ControlService({ enabled: true, engine, runner, newId: () => 'fork-id' });
+    const result = control.startRun(run('again'));
+    expect(result).toMatchObject({ ok: true, value: { kind: 'reply', sessionId: 'fork-id', promptPreview: 'again' } });
+    expect(starts[0]).toEqual(['-p', '--resume', 's1', '--fork-session', '--session-id', 'fork-id', '--permission-mode', 'default', 'again']);
+    expect(control.hasLogged('fork-id')).toBe(true);
+  });
+
+  it('keeps the log in memory when no log file is given', () => {
+    const control = new ControlService({ enabled: true, engine, runner: controllableRunner().runner });
+    expect(control.startRun(run('x')).ok).toBe(true);
+    expect(control.state().runs).toHaveLength(1);
   });
 });
