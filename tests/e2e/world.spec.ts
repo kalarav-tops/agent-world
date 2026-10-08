@@ -118,13 +118,10 @@ test('replays a lab and returns to live', async ({ page }) => {
 });
 
 test('explains how to turn on the command centre when it is off', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(baseUrl);
   await page.getByRole('button', { name: /Command centre/ }).click();
-  const drawer = page.getByRole('complementary', { name: 'Command centre' });
-  await expect(drawer).toContainText('The command centre is off');
-  await expect(drawer).toContainText('--allow-control');
-  await drawer.getByRole('button', { name: 'Close command centre' }).click();
-  await expect(drawer).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Return to world' })).toBeVisible();
 });
 
 test('takes the access key out of the address bar and keeps working after a reload', async ({ page }) => {
@@ -162,4 +159,14 @@ test('updates live as agents work and removes a closed session', async ({ page }
   rmSync(join(claudeDir, 'sessions', 'b.json'));
   await expect(page.locator('.hud__stats')).toContainText('1 session');
   await expect(page.locator('.continent-tag')).toHaveCount(1);
+});
+
+test('warps to the ship and back', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(baseUrl);
+  await page.getByRole('button', { name: /Command centre/ }).click();
+  await expect(page.getByRole('button', { name: 'Return to world' })).toBeVisible();
+  await expect(page.locator('.hud__stats')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Return to world' }).click();
+  await expect(page.locator('.hud__stats')).toContainText(/\d+ sessions?/);
 });

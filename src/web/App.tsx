@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Component, useCallback, useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactElement, type ReactNode } from 'react';
 import { replayAt, timelineBounds } from '../shared/replay';
 import type { WorldSummary } from '../shared/types';
 import { useLabDetail, useNow, usePrefersReducedMotion, useWorld } from './state/hooks';
@@ -8,10 +8,12 @@ import { Hud } from './ui/Hud';
 import { InspectPanel, type PanelView } from './ui/InspectPanel';
 import { ReplayBar, type ReplaySpeed } from './ui/ReplayBar';
 import { ViewControls } from './ui/ViewControls';
-import { CommandCentre } from './ui/CommandCentre';
 import { RequestCards } from './ui/RequestCards';
 import { useControlAccess } from './state/control';
 import { placeRequests } from './state/requests';
+import { placeReducer, showsWorld, veilOpacity, warpPhase, type Place, type PlaceAction } from './state/place';
+import { ShipScene } from './ship/ShipScene';
+import { Icon } from './ui/icons';
 
 interface Selection {
   sessionId: string;
@@ -35,7 +37,8 @@ const IDLE_REPLAY: ReplayControl = { atMs: null, playing: false, speed: 4 };
 export function App(): ReactElement {
   const { world, connected, denied } = useWorld();
   const access = useControlAccess(connected);
-  const [commandOpen, setCommandOpen] = useState(false);
+  const [place, dispatch] = useReducer(placeReducer, AT_HOME);
+  const [clock, setClock] = useState(0);
   const now = useNow();
   const reducedMotion = usePrefersReducedMotion();
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -64,6 +67,7 @@ export function App(): ReactElement {
 
   useStartFocus(world, placements, setFocus);
   useReplayClock(replay, bounds.end, setReplay, reducedMotion);
+  useWarpClock(place, reducedMotion, dispatch, setClock);
 
   const clearSelection = useCallback(() => {
     setSelection(null);
@@ -111,6 +115,8 @@ export function App(): ReactElement {
     setFocus({ key: `overview:${Date.now()}`, ...overviewFocus(placements) });
   }, [placements]);
 
+  const enterShip = useCallback(() => dispatch({ type: 'enter', at: performance.now() }), []);
+  const leaveShip = useCallback(() => dispatch({ type: 'leave', at: performance.now() }), []);
 
   const showOldestWaiting = useCallback(() => {
     const first = places.find((place) => place.labId);
@@ -118,101 +124,115 @@ export function App(): ReactElement {
     selectLab(first.sessionId, first.labId, first.scientistId ? { kind: 'scientist', scientistId: first.scientistId } : { kind: 'lab' });
   }, [places, selectLab]);
 
+  useLanding(place, selectLab);
+  const atWorld = showsWorld(place, clock, reducedMotion);
+  const rising = place.kind === 'warping-in' && warpPhase(place, clock, reducedMotion)?.phase === 'rise';
+
   const replayStates = replay.atMs !== null && detail && selection ? { ...selection, states: replayAt(detail.timeline, replay.atMs) } : null;
 
   return (
     <div className="app">
-      <SceneBoundary>
-        {world && (
-          <WorldScene
+      {atWorld ? (
+        <>
+          <SceneBoundary>
+            {world && (
+              <WorldScene
+                world={world}
+                cameraHandle={cameraHandle}
+                placements={placements}
+                selection={selection}
+                replay={replayStates}
+                focus={focus}
+                now={now}
+                reducedMotion={reducedMotion}
+                onSelectLab={(sessionId, labId) => selectLab(sessionId, labId)}
+                onSelectScientist={(sessionId, labId, scientistId) => selectLab(sessionId, labId, { kind: 'scientist', scientistId })}
+                onOpenChanges={(sessionId, labId) => selectLab(sessionId, labId, { kind: 'changes', changeIndex: null })}
+                onFocusContinent={focusContinent}
+                onClearSelection={clearSelection}
+                waiting={places.length > 0}
+                rising={rising}
+                onEnterShip={enterShip}
+              />
+            )}
+          </SceneBoundary>
+          {world && (
+            <div className={`view-controls-dock${session && lab ? ' view-controls-dock--beside-panel' : ''}`}>
+              <ViewControls camera={cameraHandle} reducedMotion={reducedMotion} />
+            </div>
+          )}
+          <Hud
             world={world}
-            cameraHandle={cameraHandle}
-            placements={placements}
-            selection={selection}
-            replay={replayStates}
-            focus={focus}
+            connected={connected}
             now={now}
-            reducedMotion={reducedMotion}
-            onSelectLab={(sessionId, labId) => selectLab(sessionId, labId)}
-            onSelectScientist={(sessionId, labId, scientistId) => selectLab(sessionId, labId, { kind: 'scientist', scientistId })}
-            onOpenChanges={(sessionId, labId) => selectLab(sessionId, labId, { kind: 'changes', changeIndex: null })}
+            focusedSessionId={focusedSessionId}
             onFocusContinent={focusContinent}
-            onClearSelection={clearSelection}
+            onOverview={overview}
+            onCommand={enterShip}
+            waiting={places}
+            onShowWaiting={showOldestWaiting}
           />
-        )}
-      </SceneBoundary>
-      {world && (
-        <div className={`view-controls-dock${session && lab ? ' view-controls-dock--beside-panel' : ''}`}>
-          <ViewControls camera={cameraHandle} reducedMotion={reducedMotion} />
+          {world && (
+            <RequestCards access={access} requests={world.control?.requests ?? []} sessions={world.sessions} now={now} />
+          )}
+          {denied && !connected && (
+            <p className="notice notice--access" role="alert">
+              This page needs its access link. Open the link Agent World printed in the terminal (it ends in <code>#token=…</code>); a new one is
+              printed every time it starts.
+            </p>
+          )}
+          {!world && !denied && <p className="notice">Connecting to the agent-world server…</p>}
+          {world && world.sessions.length === 0 && (
+            <p className="notice">No Claude Code sessions are running. Start one and it will rise here as a new continent.</p>
+          )}
+          {session && lab && (
+            <InspectPanel
+              session={session}
+              lab={lab}
+              detail={detail}
+              view={view}
+              now={now}
+              access={access}
+              onView={setView}
+              onClose={clearSelection}
+              places={places}
+              onReadConversation={setReading}
+              replayBar={
+                <ReplayBar
+                  start={bounds.start}
+                  end={bounds.end}
+                  atMs={replay.atMs}
+                  playing={replay.playing}
+                  speed={replay.speed}
+                  onStart={() => setReplay((current) => ({ ...current, atMs: bounds.start, playing: true }))}
+                  onSeek={(atMs) => setReplay((current) => ({ ...current, atMs }))}
+                  onTogglePlay={() =>
+                    setReplay((current) => {
+                      const atEnd = current.atMs !== null && current.atMs >= bounds.end;
+                      return current.playing ? { ...current, playing: false } : { ...current, atMs: atEnd ? bounds.start : current.atMs, playing: true };
+                    })
+                  }
+                  onSpeed={(speed) => setReplay((current) => ({ ...current, speed }))}
+                  onStop={() => setReplay(IDLE_REPLAY)}
+                />
+              }
+            />
+          )}
+        </>
+      ) : (
+        <SceneBoundary>
+          <ShipScene place={place} now={clock} reducedMotion={reducedMotion} waiting={places.length > 0} onLeave={leaveShip} screens={null} />
+        </SceneBoundary>
+      )}
+      {place.kind === 'ship' && (
+        <div className="ship-overlay">
+          <button type="button" className="button" onClick={leaveShip}>
+            <Icon name="back" />
+            Return to world
+          </button>
         </div>
       )}
-      <Hud
-        world={world}
-        connected={connected}
-        now={now}
-        focusedSessionId={focusedSessionId}
-        onFocusContinent={focusContinent}
-        onOverview={overview}
-        onCommand={() => setCommandOpen((open) => !open)}
-        waiting={places}
-        onShowWaiting={showOldestWaiting}
-      />
-      {world && (
-        <RequestCards access={access} requests={world.control?.requests ?? []} sessions={world.sessions} now={now} />
-      )}
-      {world && commandOpen && (
-        <CommandCentre
-          access={access}
-          sessions={world.sessions}
-          runs={world.control?.runs ?? []}
-          now={now}
-          defaultSessionId={selection?.sessionId ?? focusedSessionId}
-          onClose={() => setCommandOpen(false)}
-        />
-      )}
-      {denied && !connected && (
-        <p className="notice notice--access" role="alert">
-          This page needs its access link. Open the link Agent World printed in the terminal (it ends in <code>#token=…</code>); a new one is
-          printed every time it starts.
-        </p>
-      )}
-      {!world && !denied && <p className="notice">Connecting to the agent-world server…</p>}
-      {world && world.sessions.length === 0 && (
-        <p className="notice">No Claude Code sessions are running. Start one and it will rise here as a new continent.</p>
-      )}
-      {session && lab && (
-        <InspectPanel
-          session={session}
-          lab={lab}
-          detail={detail}
-          view={view}
-          now={now}
-          access={access}
-          onView={setView}
-          onClose={clearSelection}
-          places={places}
-          onReadConversation={setReading}
-          replayBar={
-            <ReplayBar
-              start={bounds.start}
-              end={bounds.end}
-              atMs={replay.atMs}
-              playing={replay.playing}
-              speed={replay.speed}
-              onStart={() => setReplay((current) => ({ ...current, atMs: bounds.start, playing: true }))}
-              onSeek={(atMs) => setReplay((current) => ({ ...current, atMs }))}
-              onTogglePlay={() =>
-                setReplay((current) => {
-                  const atEnd = current.atMs !== null && current.atMs >= bounds.end;
-                  return current.playing ? { ...current, playing: false } : { ...current, atMs: atEnd ? bounds.start : current.atMs, playing: true };
-                })
-              }
-              onSpeed={(speed) => setReplay((current) => ({ ...current, speed }))}
-              onStop={() => setReplay(IDLE_REPLAY)}
-            />
-          }
-        />
-      )}
+      <div className="warp-veil" style={{ opacity: veilOpacity(place, clock, reducedMotion) }} aria-hidden="true" />
     </div>
   );
 }
@@ -314,4 +334,46 @@ class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean
     }
     return this.props.children;
   }
+}
+
+/** Where you start: on the islands. */
+const AT_HOME: Place = { kind: 'world' };
+
+/**
+ * While warping, tick the place every animation frame so the warp advances and ends on time.
+ * @param place - current place
+ * @param reducedMotion - whether the person prefers reduced motion
+ * @param dispatch - place dispatcher
+ * @param setClock - clock setter, so the scenes can draw the right phase
+ */
+function useWarpClock(place: Place, reducedMotion: boolean, dispatch: Dispatch<PlaceAction>, setClock: (at: number) => void): void {
+  const warping = place.kind === 'warping-in' || place.kind === 'warping-out';
+  useEffect(() => {
+    if (!warping) return undefined;
+    let frame = 0;
+    const tick = (): void => {
+      const at = performance.now();
+      setClock(at);
+      dispatch({ type: 'tick', at, reducedMotion });
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [warping, reducedMotion, dispatch, setClock]);
+}
+
+/**
+ * When a warp back to the world lands with a target, open that lab (or agent).
+ * @param place - current place
+ * @param selectLab - opens a lab panel and flies the camera there
+ */
+function useLanding(place: Place, selectLab: (sessionId: string, labId: string, view?: PanelView) => void): void {
+  const previous = useRef<Place>(place);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = place;
+    if (before.kind !== 'warping-out' || place.kind !== 'world' || !before.target) return;
+    const { sessionId, labId, scientistId } = before.target;
+    selectLab(sessionId, labId, scientistId ? { kind: 'scientist', scientistId } : { kind: 'lab' });
+  }, [place, selectLab]);
 }

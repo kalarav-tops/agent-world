@@ -10,6 +10,7 @@ import { LabelLayerContext } from './Label';
 import { Sea, Sky, SKY_HORIZON, Sunlight } from './Environment';
 import { staticScene } from './instancing';
 import { StaticWorld } from './StaticWorld';
+import { LaunchTower } from './LaunchTower';
 
 /** Where the camera should look; a new `key` triggers the move. */
 export interface CameraFocus {
@@ -37,6 +38,9 @@ interface WorldSceneProps {
   onOpenChanges: (sessionId: string, labId: string) => void;
   onFocusContinent: (sessionId: string) => void;
   onClearSelection: () => void;
+  waiting: boolean;
+  rising: boolean;
+  onEnterShip: () => void;
 }
 
 const MAX_LAB_LIGHTS = 6;
@@ -81,6 +85,7 @@ export function WorldScene(props: WorldSceneProps): ReactElement {
             <AdaptiveDpr pixelated />
             <Suspense fallback={null}>
               <StaticWorld scene={staticLayer} onSelectLab={props.onSelectLab} onHoverLab={setHoveredLab} />
+              <LaunchTower waiting={props.waiting} reducedMotion={props.reducedMotion} onEnter={props.onEnterShip} />
             {world.sessions.map((session, index) => {
               const placement = placements[index];
               if (!placement) return null;
@@ -103,7 +108,7 @@ export function WorldScene(props: WorldSceneProps): ReactElement {
               );
             })}
             </Suspense>
-            <FocusControls focus={props.focus} reducedMotion={props.reducedMotion} handle={props.cameraHandle} />
+            <FocusControls focus={props.focus} reducedMotion={props.reducedMotion} handle={props.cameraHandle} rising={props.rising} />
           <DebugHandle />
           </Canvas>
         </LabelLayerContext.Provider>
@@ -131,11 +136,12 @@ function DebugHandle(): null {
 }
 
 /**
- * Orbit/zoom/pan controls that glide to a new focus whenever its key changes.
- * @param props - focus and motion preference
+ * Orbit/zoom/pan controls that glide to a new focus whenever its key changes, and up the launch
+ * tower when the warp to the ship begins.
+ * @param props - focus, motion preference, camera handle and whether the warp's rise is on
  * @returns the controls
  */
-function FocusControls({ focus, reducedMotion, handle }: { focus: CameraFocus; reducedMotion: boolean; handle: CameraHandle }): ReactElement {
+function FocusControls({ focus, reducedMotion, handle, rising }: { focus: CameraFocus; reducedMotion: boolean; handle: CameraHandle; rising: boolean }): ReactElement {
   const controls = useRef<ComponentRef<typeof CameraControls>>(null);
 
   useEffect(() => {
@@ -149,6 +155,10 @@ function FocusControls({ focus, reducedMotion, handle }: { focus: CameraFocus; r
     const { x, z, distance } = focus;
     void controls.current?.setLookAt(x, distance * 0.55, z + distance, x, 0.6, z, !reducedMotion);
   }, [focus, reducedMotion]);
+
+  useEffect(() => {
+    if (rising) void controls.current?.setLookAt(0, 30, 6, 0, 28, 0, !reducedMotion);
+  }, [rising, reducedMotion]);
 
   return <CameraControls ref={controls} makeDefault minDistance={6} maxDistance={600} maxPolarAngle={Math.PI * 0.46} smoothTime={0.35} />;
 }

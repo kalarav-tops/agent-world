@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeReducer, REDUCED_WARP_MS, warpDuration, warpPhase, type Place } from '../../src/web/state/place';
+import { placeReducer, REDUCED_WARP_MS, showsWorld, veilOpacity, warpDuration, warpPhase, type Place } from '../../src/web/state/place';
 
 const world: Place = { kind: 'world' };
 
@@ -43,5 +43,32 @@ describe('warpPhase', () => {
     expect(warpPhase(place, 2400, false)?.phase).toBe('rise');
     expect(warpPhase({ kind: 'warping-in', startedAt: 0 }, 150, true)).toEqual({ phase: 'fade', progress: 0.5 });
     expect(warpPhase({ kind: 'ship' }, 0, false)).toBeNull();
+  });
+});
+
+describe('showsWorld and veilOpacity', () => {
+  it('shows the world while at home and during the rise, the ship otherwise', () => {
+    expect(showsWorld({ kind: 'world' }, 0, false)).toBe(true);
+    expect(showsWorld({ kind: 'ship' }, 0, false)).toBe(false);
+    expect(showsWorld({ kind: 'warping-in', startedAt: 0 }, 300, false)).toBe(true);
+    expect(showsWorld({ kind: 'warping-in', startedAt: 0 }, 1000, false)).toBe(false);
+    expect(showsWorld({ kind: 'warping-out', startedAt: 0, target: null }, 100, false)).toBe(false);
+    expect(showsWorld({ kind: 'warping-out', startedAt: 0, target: null }, 2400, false)).toBe(true);
+  });
+
+  it('switches scenes halfway through the cross-fade with reduced motion', () => {
+    expect(showsWorld({ kind: 'warping-in', startedAt: 0 }, 100, true)).toBe(true);
+    expect(showsWorld({ kind: 'warping-in', startedAt: 0 }, 200, true)).toBe(false);
+    expect(showsWorld({ kind: 'warping-out', startedAt: 0, target: null }, 100, true)).toBe(false);
+    expect(showsWorld({ kind: 'warping-out', startedAt: 0, target: null }, 200, true)).toBe(true);
+  });
+
+  it('darkens the veil only while fading', () => {
+    expect(veilOpacity({ kind: 'world' }, 0, false)).toBe(0);
+    expect(veilOpacity({ kind: 'warping-in', startedAt: 0 }, 300, false)).toBe(0);
+    expect(veilOpacity({ kind: 'warping-in', startedAt: 0 }, 2200, false)).toBe(1);
+    expect(veilOpacity({ kind: 'warping-out', startedAt: 0, target: null }, 150, false)).toBe(0.5);
+    expect(veilOpacity({ kind: 'warping-in', startedAt: 0 }, 150, true)).toBe(1);
+    expect(veilOpacity({ kind: 'warping-in', startedAt: 0 }, 0, true)).toBe(0);
   });
 });

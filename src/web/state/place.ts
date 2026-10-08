@@ -60,3 +60,34 @@ export function warpPhase(place: Place, at: number, reducedMotion: boolean): { p
   }
   return { phase: phases[2], progress: 1 };
 }
+
+/**
+ * Whether the islands are on screen: at home, and during the rise up (or down) the tower. With
+ * reduced motion the scenes swap halfway through the cross-fade, while the veil is darkest.
+ * @param place - current place
+ * @param at - current time
+ * @param reducedMotion - whether the person prefers reduced motion
+ * @returns true to draw the world, false to draw the ship
+ */
+export function showsWorld(place: Place, at: number, reducedMotion: boolean): boolean {
+  if (place.kind === 'world') return true;
+  if (place.kind === 'ship') return false;
+  const phase = warpPhase(place, at, reducedMotion);
+  if (reducedMotion) return place.kind === 'warping-in' ? (phase?.progress ?? 1) < 0.5 : (phase?.progress ?? 0) >= 0.5;
+  return phase?.phase === 'rise';
+}
+
+/**
+ * How dark the veil over the screen is: it lifts as you arrive on the bridge and falls as you
+ * leave it; with reduced motion it rises and falls once across the cross-fade.
+ * @param place - current place
+ * @param at - current time
+ * @param reducedMotion - whether the person prefers reduced motion
+ * @returns opacity from 0 to 1
+ */
+export function veilOpacity(place: Place, at: number, reducedMotion: boolean): number {
+  const phase = warpPhase(place, at, reducedMotion);
+  if (!phase || phase.phase !== 'fade') return 0;
+  if (reducedMotion) return 1 - Math.abs(2 * phase.progress - 1);
+  return place.kind === 'warping-in' ? 1 - phase.progress : phase.progress;
+}

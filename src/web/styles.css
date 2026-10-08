@@ -1408,3 +1408,49 @@ textarea {
   color: var(--text);
   cursor: pointer;
 }
+
+.ship {
+  background: #05080d;
+}
+
+.ship-overlay {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 8;
+}
+
+.warp-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  background: #05080d;
+  pointer-events: none;
+}
+
+.tower-tag {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgb(255 159 28 / 0.6);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.console {
+  display: grid;
+  grid-template-columns: 22rem 30rem;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid rgb(255 159 28 / 0.35);
+  border-radius: var(--radius-panel);
+  background: linear-gradient(rgb(255 255 255 / 0.02) 50%, transparent 50%) 0 0 / 100% 4px, rgb(10 16 22 / 0.94);
+  box-shadow: 0 0 40px rgb(255 159 28 / 0.18);
+  pointer-events: auto;
+}
+
+.label-layer .console,
+.label-layer .console * {
+  pointer-events: auto;
+}
