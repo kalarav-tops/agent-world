@@ -1,11 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { askArgs, explanationQuestion, runArgs, validatePrompt, PROMPT_LIMIT } from '../../src/server/claude-args';
+import { askArgs, EFFORTS, explanationQuestion, launchArgs, MODELS, runArgs, sessionName, validatePrompt, PROMPT_LIMIT } from '../../src/server/claude-args';
 import { RequestStore, parseQuestions, permissionDetail } from '../../src/server/requests';
 import { permissionOutput, questionOutput } from '../../src/server/hook-output';
 
 describe('claude arguments', () => {
-  it('starts a new task as a print-mode run with the chosen permission mode', () => {
-    expect(runArgs({ prompt: 'fix the build', permissionMode: 'acceptEdits' })).toEqual(['-p', '--permission-mode', 'acceptEdits', 'fix the build']);
+  it('builds a fresh launch with its own session id, name, model and effort', () => {
+    expect(launchArgs({ sessionId: '0b8f…', prompt: 'Add retries\nand tests', permissionMode: 'plan', model: 'sonnet', effort: 'high' })).toEqual([
+      '-p', '--session-id', '0b8f…', '--name', 'Add retries', '--permission-mode', 'plan', '--model', 'sonnet', '--effort', 'high', 'Add retries\nand tests',
+    ]);
+    expect(launchArgs({ sessionId: 'id', prompt: 'x', permissionMode: 'default' })).toEqual(['-p', '--session-id', 'id', '--name', 'x', '--permission-mode', 'default', 'x']);
+  });
+
+  it('names a session after the first line of its prompt, shortened', () => {
+    expect(sessionName(`${'a'.repeat(80)}\nmore`)).toBe(`${'a'.repeat(59)}…`);
+    expect(sessionName('\n\n  Fix it  \n')).toBe('Fix it');
+  });
+
+  it('knows the allowed models and efforts', () => {
+    expect(MODELS).toEqual(['opus', 'sonnet', 'haiku', 'fable']);
+    expect(EFFORTS).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+  });
+
+  it('gives a fork a session id chosen here when asked', () => {
+    expect(runArgs({ prompt: 'again', permissionMode: 'plan', resumeSessionId: 's-1', newSessionId: 'f-2' })).toEqual([
+      '-p', '--resume', 's-1', '--fork-session', '--session-id', 'f-2', '--permission-mode', 'plan', 'again',
+    ]);
   });
 
   it('continues a session as a fork so the open session is never written into', () => {

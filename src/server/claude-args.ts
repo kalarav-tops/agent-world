@@ -5,25 +5,26 @@ export const PROMPT_LIMIT = 20_000;
 export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan'] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
-/** A prompt run: a new task, or a continuation of a session's work on a fork. */
+/** A follow-up to a session, run on a fork, optionally with a session id chosen here. */
 export interface RunRequest {
   prompt: string;
   permissionMode: PermissionMode;
-  resumeSessionId?: string;
+  resumeSessionId: string;
+  newSessionId?: string;
 }
 
 /** The result of checking a prompt. */
 export type PromptCheck = { ok: true; prompt: string } | { ok: false; reason: string };
 
 /**
- * Arguments for `claude` to run a prompt non-interactively. Continuing a session always forks it, so
- * the session open in your editor or terminal is never written into.
- * @param request - prompt, permission mode and optional session to continue from
+ * Arguments for `claude` to continue a session non-interactively. It always forks, so the session
+ * open in your editor or terminal is never written into.
+ * @param request - prompt, permission mode, the session to continue and an optional id for the fork
  * @returns argument list (no shell involved)
  */
 export function runArgs(request: RunRequest): string[] {
-  const resume = request.resumeSessionId ? ['--resume', request.resumeSessionId, '--fork-session'] : [];
-  return ['-p', ...resume, '--permission-mode', request.permissionMode, request.prompt];
+  const id = request.newSessionId ? ['--session-id', request.newSessionId] : [];
+  return ['-p', '--resume', request.resumeSessionId, '--fork-session', ...id, '--permission-mode', request.permissionMode, request.prompt];
 }
 
 /**
@@ -81,4 +82,50 @@ export function explanationQuestion(target: ExplanationTarget): string {
     'What it fixed or worked on: a short bullet list.',
     'Do not use any tools; answer only from what you already know.',
   ].join('\n');
+}
+
+/** Models a fresh conversation may use (aliases for the latest of each family). */
+export const MODELS = ['opus', 'sonnet', 'haiku', 'fable'] as const;
+export type ModelAlias = (typeof MODELS)[number];
+
+/** Effort levels a fresh conversation may use. */
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type EffortLevel = (typeof EFFORTS)[number];
+
+/** A fresh conversation started from the ship. */
+export interface LaunchRequest {
+  sessionId: string;
+  prompt: string;
+  permissionMode: PermissionMode;
+  model?: ModelAlias;
+  effort?: EffortLevel;
+}
+
+/**
+ * Arguments for `claude` to start a fresh conversation with a session id chosen here, so its
+ * transcript is known before its first line is written.
+ * @param request - session id, checked prompt and options
+ * @returns argument list (no shell involved)
+ */
+export function launchArgs(request: LaunchRequest): string[] {
+  return [
+    '-p',
+    '--session-id', request.sessionId,
+    '--name', sessionName(request.prompt),
+    '--permission-mode', request.permissionMode,
+    ...(request.model ? ['--model', request.model] : []),
+    ...(request.effort ? ['--effort', request.effort] : []),
+    request.prompt,
+  ];
+}
+
+/**
+ * A session's display name: the first non-empty line of its prompt, at most 60 characters. A
+ * checked prompt never starts with "-", so neither does its name.
+ * @param prompt - checked prompt
+ * @returns name
+ */
+export function sessionName(prompt: string): string {
+  const line = prompt.split('\n').map((candidate) => candidate.trim()).find(Boolean) ?? '';
+  return line.length > 60 ? `${line.slice(0, 59)}…` : line;
 }

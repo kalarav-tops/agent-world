@@ -230,7 +230,7 @@ export class ControlService {
    */
   private launch(session: SessionInfo, prompt: string, mode: PermissionMode, resume: boolean): ControlRun {
     const runner = this.options.runner as ClaudeRunner;
-    const args = runArgs({ prompt, permissionMode: mode, ...(resume ? { resumeSessionId: session.sessionId } : {}) });
+    const args = resume ? runArgs({ prompt, permissionMode: mode, resumeSessionId: session.sessionId }) : ['-p', '--permission-mode', mode, prompt];
     const handle = runner.start(args, session.cwd, this.options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS);
     const run = {
       id: randomUUID(),
