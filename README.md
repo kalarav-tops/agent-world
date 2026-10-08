@@ -81,6 +81,7 @@ agent-world --open      # opens the world in your browser
 | Watch a lab's work again | **Replay this lab** in the lab panel |
 | Fly to a session | Click it in the bottom-left list |
 | See everything | Click **Agent World** in the top bar |
+| Go to the ship | Click the launch tower, or **Command centre** in the top bar; **Return to world** (or Escape) brings you back |
 | Move the camera | Drag to orbit and scroll to zoom, or use the camera buttons |
 | Close the panel | Press Escape |
 
@@ -107,11 +108,15 @@ By default Agent World only watches. Start it with `--allow-control` to act from
 npm start -- --allow-control
 ```
 
+![The ship's bridge: launch a fresh conversation and read its history](docs/images/ship.jpg)
+
 | You can | How it works |
 |---|---|
-| **Send a prompt** (Command centre, top bar) | Pick a session, then **Continue this session's work** or **Start a new task** in its project folder, choose a permission mode and write the prompt. Continuing runs `claude -p --resume <id> --fork-session`. That is a copy with the whole conversation, so the session open in your editor is never written into. |
+| **Launch a fresh conversation** (the launch tower at the centre of the world, or **Command centre** in the top bar) | You warp to the ship. On its console, pick a project (one with a live session, or one Claude Code worked in during the last 30 days), the permissions, model and effort, then write the prompt. It runs `claude -p --session-id <new id>` in that folder, rises as its own island, and stays in the ship's History, where you can read it as a chat. |
+| **Reply to a session** (lab panel) | Runs `claude -p --resume <id> --fork-session`: a copy with the whole conversation, so the session open in your editor is never written into. The copy rises as its own island. |
+| **Read a conversation** (lab panel) | **Read conversation** shows the session's prompts, replies and tool calls as a chat. |
 | **Ask what a lab or agent did** (side panel) | Runs a throwaway copy of the session with no tools, no MCP servers and nothing saved. You get an explanation, an example, and what it fixed or worked on. |
-| **Answer agent questions and permission prompts** | Needs the hook below. When an agent asks a question or needs permission, a card appears at the top of the world, showing exactly what would be allowed: the whole command, path, URL or tool arguments. Answer there, or wait: after 120 seconds the card goes away and the normal dialog appears in the session. |
+| **Answer agent questions and permission prompts** | Needs the hook below. A waiting agent's bubble pulses, the tower's beacon flashes and the top bar shows **N waiting**; click it to open that agent's panel with the question or permission, showing exactly what would be allowed. If you don't answer, the normal dialog appears in the session after 120 seconds. |
 
 To answer agents from the world, print the hook settings and merge them into `~/.claude/settings.json`:
 
@@ -140,6 +145,8 @@ Good to know:
   - The hook never sends the key: it signs each request, and it accepts an answer only from a server that proves it holds the key.
   - It sends nothing about the tool call until that proof arrives, so a program that takes over the port learns nothing and can't fake an answer.
 - **Stale answers are refused.** An answer counts only while the agent's hook is still waiting for it.
+- **Ship history.** Launches and replies are listed in `~/.agent-world/ship-log.json` (only you can read it) with a 280-character prompt preview, never the full prompt. Delete the file to clear the history.
+- **Projects by id.** The ship picks a project from a list the server builds; the browser never sends a folder path.
 - **No shell.** `claude` is launched with an argument list, in the working folder Claude Code's own session registry reports, never one sent by the browser.
 - **Key exposure.** `--open` goes through a private page in `~/.agent-world`, so the key never appears on a command line. The key does end up in your browser history as part of the link; on a shared login, stop Agent World when you're done, which retires the key.
 - **Don't expose the port.** Your transcripts contain your code and prompts.

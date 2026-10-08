@@ -110,7 +110,8 @@ The WebSocket carries a light **summary** (sessions, labs, scientists, statuses,
 - **Click** a scientist: role, instruction it received, live action feed, final report.
 - **Click** a lab: the original prompt, its scientists, the changes board (click a file for its diff), and replay.
 - **Replay:** scrub or play a lab's timeline at 1×/4×/16×; scientists move as they did.
-- **HUD:** live sessions, active scientists, labs, edits, scientists waiting or asking.
+- **HUD:** labelled counts (sessions, busy, labs, edits), a **N waiting** chip that flies to the oldest agent waiting on you, a stuck-over-20s chip, Live, and **Command centre** (warps to the ship).
+- **Lab panel:** Waiting on you (requests that could not be placed on one agent), prompt, agents, changes, **Read conversation**, and a **Reply to this session** box.
 
 ## Command centre (`--allow-control`)
 
@@ -118,16 +119,23 @@ Off by default; the world is then strictly read-only. With the flag, using only 
 
 | Action | Mechanism |
 |---|---|
-| Continue a session's work | `claude -p --resume <id> --fork-session --permission-mode <mode> "<prompt>"` in the session's registry `cwd`. Forking keeps the open session untouched (writing into a live non-background session from outside is unsupported). |
-| New task in a project | `claude -p --permission-mode <mode> "<prompt>"` in that project's folder |
+| Reply to a session (lab panel) | `claude -p --resume <id> --fork-session --session-id <uuid> --permission-mode <mode> "<prompt>"` in the session's registry `cwd`. Forking keeps the open session untouched (writing into a live non-background session from outside is unsupported). |
+| Launch a fresh conversation (ship) | `claude -p --session-id <uuid> --name "<first line>" --permission-mode <mode> [--model <alias>] [--effort <level>] "<prompt>"` in a project folder chosen by id from the server's own list (`GET /api/projects`: live session folders plus folders with a transcript changed in the last 30 days, read from its `cwd`; the scan is cached 30 s, live sessions are read fresh). `POST /api/launches` returns `{launchId, sessionId}`. Models: `opus`, `sonnet`, `haiku`, `fable`; efforts: `low`…`max`. A folder that no longer exists answers 404. |
+| Read a conversation | `GET /api/conversations/:sessionId`: the last 16 MB of the main transcript as chat items (prompts, replies, tool calls with their outcome), at most 2,000. Only live sessions and sessions in the ship log; anything else answers 404. |
 | Explain a lab or agent | `claude -p --resume <id> --fork-session --no-session-persistence --tools "" --output-format json "<question>"` |
 | Answer questions / permissions | A command hook on `PreToolUse` (matcher `AskUserQuestion`) and `PermissionRequest`. It posts the request (a permission carries the full tool input: whole command, path, URL or MCP arguments, cut only past 8,000 characters with a marker), long-polls for an answer for up to 120 s and always ends 5 s before the server drops the request. It then prints `permissionDecision: deny` with the answers as the reason (questions) or `decision.behavior` (permissions). No answer, or any error: it withdraws the request (`DELETE /api/hook-requests/:id`), exits silently, and the normal dialog appears. |
 
 The session inbox socket was not used: its message format is not documented.
 
+**Ship log.** Every launch and reply is recorded in `~/.agent-world/ship-log.json` (newest 200; mode 600 in a mode-700 folder, written atomically): kind, session id, project id and name, a 280-character prompt preview, model, effort, permission mode, times, state and exit code. Entries still marked running when it is read come back as failed (an earlier Agent World stopped). An unreadable file is logged and treated as empty. The newest 50 entries travel with the world summary.
+
+**Answering in place.** A question carries the hook's `tool_use_id`, so it attaches to the agent whose pending tool call has that id. A permission prompt has no `tool_use_id` in its hook input, so it attaches to the only agent that could be waiting for it (working on that tool); when that is ambiguous nothing is guessed and it is answered in the lab's **Waiting on you** section instead.
+
+**The ship.** The command centre is a place: a launch-tower island at the centre of the ocean (continents are placed around it). Clicking it, or the top-bar button, warps there: the camera rises up the tower (0.6 s), a streak-star tunnel runs (1.6 s), and the view fades onto the bridge (0.3 s); with reduced motion it is a 300 ms cross-fade. Only one canvas is mounted at a time. The bridge's console holds two screens, Launch and History, rendered as drei `<Html>` through `Label.tsx`. Escape (outside a field) or **Return to world** warps back; **Go to its lab** warps back and opens that lab.
+
 A request is answerable only while its hook is waiting on it (or polled within the last 5 s). A long-poll whose connection closes (the hook was killed or crashed) counts as gone at once. After that the server answers 409, and the card leaves the page. A permission whose detail was cut can be denied from the page, but `allow` is refused (400): it must be allowed in the session, where it can be read in full. A broadcast is scheduled for each request's expiry and for each poll that ends without an answer, so stale cards disappear without a reload. Answers must match the request: a permission takes only `allow`/`deny`, and a question set takes one answer for each of its own questions (other keys are dropped).
 
-Limits: prompts ≤ 20,000 chars, no `/`, `!` or `-` prompts (the prompt is an argv entry), 3 concurrent runs, each stopped after 30 minutes, explanations one per session and two overall, 50 open requests, 64 KB request bodies, 25 s per long-poll. Explanations also pass `--strict-mcp-config`, so the throwaway fork loads no MCP servers. Every `claude` runs in its own process group (not on Windows). Stopping it, on a timeout or at shutdown, sends SIGTERM to the group and SIGKILL 3 s later, so commands it started are stopped too. An explanation keeps its slot until its process has exited. Shutdown waits at most 5 s, and the exit handler SIGKILLs whatever is left.
+Limits: launches and replies share the run limit; prompts ≤ 20,000 chars, no `/`, `!` or `-` prompts (the prompt is an argv entry), 3 concurrent runs, each stopped after 30 minutes, explanations one per session and two overall, 50 open requests, 64 KB request bodies, 25 s per long-poll. Explanations also pass `--strict-mcp-config`, so the throwaway fork loads no MCP servers. Every `claude` runs in its own process group (not on Windows). Stopping it, on a timeout or at shutdown, sends SIGTERM to the group and SIGKILL 3 s later, so commands it started are stopped too. An explanation keeps its slot until its process has exited. Shutdown waits at most 5 s, and the exit handler SIGKILLs whatever is left.
 
 ## Security
 
