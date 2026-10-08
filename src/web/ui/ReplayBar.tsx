@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { Icon } from './icons';
 
 /** Replay playback speeds. */
 export const REPLAY_SPEEDS = [1, 4, 16] as const;
@@ -30,6 +31,7 @@ export function ReplayBar(props: ReplayBarProps): ReactElement {
     return (
       <div className="replay">
         <button type="button" className="button" onClick={props.onStart}>
+          <Icon name="replay" />
           Replay this lab
         </button>
         <span className="replay__length">{duration(end - start)} of work</span>
@@ -39,6 +41,7 @@ export function ReplayBar(props: ReplayBarProps): ReactElement {
   return (
     <div className="replay replay--on">
       <button type="button" className="button" onClick={props.onTogglePlay} aria-pressed={playing}>
+        <Icon name={playing ? 'pause' : 'play'} />
         {playing ? 'Pause' : 'Play'}
       </button>
       <input
@@ -62,7 +65,7 @@ export function ReplayBar(props: ReplayBarProps): ReactElement {
           </button>
         ))}
       </div>
-      <button type="button" className="text-button" onClick={props.onStop}>
+      <button type="button" className="button button--quiet" onClick={props.onStop}>
         Back to live
       </button>
     </div>

@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import type { SessionSummary, WorldSummary } from '../../shared/types';
 import { isWaiting } from '../scene/layout';
 import { clientLabel, preview } from './format';
+import { Icon } from './icons';
 
 /** Props for the heads-up display. */
 interface HudProps {
@@ -54,29 +55,42 @@ export function Hud({ world, connected, now, focusedSessionId, onFocusContinent,
     <>
       <header className="hud">
         <button type="button" className="hud__title" onClick={onOverview}>
+          <Icon name="logo" className="hud__logo" />
           Agent World
         </button>
         {stats && (
           <ul className="hud__stats" aria-label="World activity">
-            <li>{plural(stats.sessions, 'session')}</li>
-            <li>{stats.busy} busy</li>
-            {stats.asking > 0 && <li className="hud__stat--asking">{stats.asking} asking you</li>}
-            {stats.waiting > 0 && (
-              <li className="hud__stat--waiting" title="A tool call has been pending over 20 seconds: a permission prompt or a long command">
-                {stats.waiting} stuck over 20s
-              </li>
-            )}
-            <li>{plural(stats.labs, 'lab')}</li>
-            <li>{plural(stats.edits, 'edit')}</li>
+            <Metric value={stats.sessions} noun="session" />
+            <Metric value={stats.busy} noun="busy" fixed />
+            <Metric value={stats.labs} noun="lab" />
+            <Metric value={stats.edits} noun="edit" />
           </ul>
         )}
+        {stats && (stats.asking > 0 || stats.waiting > 0) && (
+          <div className="hud__alerts">
+            {stats.asking > 0 && (
+              <span className="hud__chip hud__chip--asking">
+                <span className="status-dot status-dot--asking" aria-hidden="true" />
+                {stats.asking} asking you
+              </span>
+            )}
+            {stats.waiting > 0 && (
+              <span className="hud__chip hud__stuck" title="A tool call has been pending over 20 seconds: a permission prompt or a long command">
+                <Icon name="alert" />
+                {stats.waiting} stuck over 20s
+              </span>
+            )}
+          </div>
+        )}
+        <p className="hud__live" role="status">
+          <span className={`status-dot${connected ? ' status-dot--done' : ''}`} aria-hidden="true" />
+          {connected ? 'Live' : 'Reconnecting…'}
+        </p>
         <button type="button" className="hud__command" onClick={onCommand}>
+          <Icon name="command" />
           Command centre
           {waitingOnYou > 0 && <span className="hud__badge">{waitingOnYou}</span>}
         </button>
-        <p className={`hud__link${connected ? ' hud__link--live' : ''}`} role="status">
-          {connected ? 'Live' : 'Reconnecting…'}
-        </p>
       </header>
       {world && world.sessions.length > 0 && (
         <nav className="continents" aria-label="Sessions">
@@ -110,6 +124,21 @@ function ContinentButton({ session, active, onClick }: { session: SessionSummary
         {clientLabel(session.entrypoint)}, {plural(session.labs.length, 'lab')}
       </span>
     </button>
+  );
+}
+
+/**
+ * One labelled number in the top bar. The value and label read as "3 labs" to tests and screen
+ * readers, while the label is drawn small beneath the value.
+ * @param props - the count, its noun, and whether the noun never takes a plural
+ * @returns the list item
+ */
+function Metric({ value, noun, fixed = false }: { value: number; noun: string; fixed?: boolean }): ReactElement {
+  return (
+    <li className="hud__metric">
+      <span className="hud__metric-value">{value}</span>{' '}
+      <span className="hud__metric-label">{fixed || value === 1 ? noun : `${noun}s`}</span>
+    </li>
   );
 }
 

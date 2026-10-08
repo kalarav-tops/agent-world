@@ -1,5 +1,6 @@
 import { useEffect, type ReactElement } from 'react';
 import type { CameraHandle } from '../scene/WorldScene';
+import { Icon, type IconName } from './icons';
 
 /** Props for the view controls. */
 interface ViewControlsProps {
@@ -46,44 +47,28 @@ export function ViewControls({ camera, reducedMotion }: ViewControlsProps): Reac
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const button = (action: keyof typeof KEYS, label: string, icon: IconName): ReactElement => (
+    <button type="button" className="view-controls__button" onClick={actions[action]} aria-label={`${label} (${KEYS[action]})`} title={`${label} (${KEYS[action]})`}>
+      <Icon name={icon} />
+    </button>
+  );
+
   return (
     <div className="view-controls" role="toolbar" aria-label="Camera">
-      <button type="button" className="view-controls__button" onClick={actions.zoomIn} aria-label={`Zoom in (${KEYS.zoomIn})`} title={`Zoom in (${KEYS.zoomIn})`}>
-        <Icon path="M12 5v14M5 12h14" />
-      </button>
-      <button type="button" className="view-controls__button" onClick={actions.zoomOut} aria-label={`Zoom out (${KEYS.zoomOut})`} title={`Zoom out (${KEYS.zoomOut})`}>
-        <Icon path="M5 12h14" />
-      </button>
-      <span className="view-controls__gap" aria-hidden="true" />
-      <button type="button" className="view-controls__button" onClick={actions.turnLeft} aria-label={`Turn left (${KEYS.turnLeft})`} title={`Turn left (${KEYS.turnLeft})`}>
-        <Icon path="M9 7H5V3M5 7a8 8 0 1 1-1 7" />
-      </button>
-      <button type="button" className="view-controls__button" onClick={actions.turnRight} aria-label={`Turn right (${KEYS.turnRight})`} title={`Turn right (${KEYS.turnRight})`}>
-        <Icon path="M15 7h4V3M19 7a8 8 0 1 0 1 7" />
-      </button>
-      <button type="button" className="view-controls__button" onClick={actions.tiltUp} aria-label={`Tilt up (${KEYS.tiltUp})`} title={`Tilt up (${KEYS.tiltUp})`}>
-        <Icon path="M6 15l6-6 6 6" />
-      </button>
-      <button type="button" className="view-controls__button" onClick={actions.tiltDown} aria-label={`Tilt down (${KEYS.tiltDown})`} title={`Tilt down (${KEYS.tiltDown})`}>
-        <Icon path="M6 9l6 6 6-6" />
-      </button>
-      <span className="view-controls__gap" aria-hidden="true" />
-      <button type="button" className="view-controls__button" onClick={actions.reset} aria-label={`Face north (${KEYS.reset})`} title={`Face north (${KEYS.reset})`}>
-        <Icon path="M12 3l4 9h-8zM12 21v-9" />
-      </button>
+      <div className="view-controls__group" role="group" aria-label="Zoom">
+        {button('zoomIn', 'Zoom in', 'zoomIn')}
+        {button('zoomOut', 'Zoom out', 'zoomOut')}
+      </div>
+      <div className="view-controls__group" role="group" aria-label="Turn and tilt">
+        {button('turnLeft', 'Turn left', 'turnLeft')}
+        {button('turnRight', 'Turn right', 'turnRight')}
+        {button('tiltUp', 'Tilt up', 'tiltUp')}
+        {button('tiltDown', 'Tilt down', 'tiltDown')}
+      </div>
+      <div className="view-controls__group" role="group" aria-label="Reset">
+        {button('reset', 'Face north', 'north')}
+      </div>
     </div>
   );
 }
 
-/**
- * A stroked 24-pixel icon.
- * @param props - SVG path data
- * @returns the icon
- */
-function Icon({ path }: { path: string }): ReactElement {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d={path} />
-    </svg>
-  );
-}

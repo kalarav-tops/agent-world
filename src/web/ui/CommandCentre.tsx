@@ -2,6 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent, type ReactElement } from 
 import type { ControlRun, SessionSummary } from '../../shared/types';
 import { sendControl, type ControlAccess } from '../state/control';
 import { preview, timeAgo } from './format';
+import { Icon } from './icons';
 
 /** Props for the command centre drawer. */
 interface CommandCentreProps {
@@ -62,12 +63,12 @@ export function CommandCentre({ access, sessions, runs, now, defaultSessionId, o
   return (
     <aside className="command" aria-label="Command centre">
       <header className="panel__header">
-        <div>
+        <div className="panel__heading">
           <h2 className="panel__title">Command centre</h2>
           <p className="panel__meta">Send work to your sessions from the world</p>
         </div>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close command centre">
-          ×
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close command centre" title="Close">
+          <Icon name="close" />
         </button>
       </header>
       <div className="panel__body">

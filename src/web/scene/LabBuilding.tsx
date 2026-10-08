@@ -5,11 +5,10 @@ import { DoubleSide, Vector3, type Mesh, type MeshBasicMaterial } from 'three';
 import type { LabSummary } from '../../shared/types';
 import type { ReplayState } from '../../shared/replay';
 import { isWaiting, LAB_SIZE, scientistTargets, type LabType } from './layout';
-import { LAB_STYLES } from './labStyles';
 import { ScientistFigure } from './ScientistFigure';
 import { Stations } from './Stations';
 import { Label } from './Label';
-import { agentCount, labClock, preview } from '../ui/format';
+import { LabTag } from '../ui/LabTag';
 
 /** Props for one lab on a continent. */
 export interface LabBuildingProps {
@@ -63,24 +62,7 @@ export function LabBuilding(props: LabBuildingProps): ReactElement {
       <Interior {...props} lit={lit} />
       {(lit || selected || hovered) && (
         <Label position={[0, WALL_HEIGHT + 1.6, -HALF * scale]} center zIndexRange={[15, 5]}>
-          <button type="button" className={`lab-tag${lit ? ' lab-tag--lit' : ''}`} onClick={onSelectLab}>
-            <span className="lab-tag__head">
-              <span className="lab-tag__index">Lab {lab.index}</span>
-              <span className="lab-tag__type" style={{ background: LAB_STYLES[labType].trim }}>
-                {LAB_STYLES[labType].name}
-              </span>
-              {lit && <span className="lab-tag__live">Working</span>}
-              <span className="lab-clock" aria-label={lit ? 'Running for' : 'Took'}>
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <circle cx="8" cy="8" r="6.5" />
-                  <path d="M8 4.5V8l2.5 1.5" />
-                </svg>
-                {labClock(lab.startedAt, lit ? new Date(now).toISOString() : lab.updatedAt)}
-              </span>
-            </span>
-            <span className="lab-tag__prompt">{preview(lab.prompt, 42) || 'No prompt text'}</span>
-            <span className="lab-tag__count">{agentCount(lab.scientists)}</span>
-          </button>
+          <LabTag lab={lab} labType={labType} lit={lit} now={now} onSelect={onSelectLab} />
         </Label>
       )}
     </group>
@@ -112,7 +94,7 @@ function Interior(props: LabBuildingProps & { lit: boolean }): ReactElement {
     <group>
       {lit && withLight && <pointLight position={[0, 2.4, 0]} color={WINDOW_LIT} intensity={9} distance={10} decay={1.6} />}
       <Detailed distances={[0, EQUIPMENT_VISIBLE_DISTANCE]}>
-        <Stations lit={lit} animate={!reducedMotion} scale={scale} type={labType} changeCount={lab.changeCount} showBadge={props.selected} onOpenChanges={onOpenChanges} />
+        <Stations lit={lit} animate={!reducedMotion} scale={scale} type={labType} changeCount={lab.changeCount} showBadge={props.selected && lab.changeCount > 0}onOpenChanges={onOpenChanges} />
         <group />
       </Detailed>
       <Detailed distances={[0, SCIENTISTS_VISIBLE_DISTANCE]}>

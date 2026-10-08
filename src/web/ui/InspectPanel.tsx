@@ -6,6 +6,8 @@ import { DiffView } from './DiffView';
 import { ExplainButton } from './ExplainButton';
 import type { ControlAccess } from '../state/control';
 import { agentCount, preview, roleLabel, statusLabel, timeAgo } from './format';
+import { effortLabel, modelLabel } from '../../shared/models';
+import { Icon } from './icons';
 
 /** What the panel shows. */
 export type PanelView = { kind: 'lab' } | { kind: 'changes'; changeIndex: number | null } | { kind: 'scientist'; scientistId: string };
@@ -30,18 +32,31 @@ interface InspectPanelProps {
  * @returns the panel
  */
 export function InspectPanel(props: InspectPanelProps): ReactElement {
-  const { session, lab, view, onClose } = props;
+  const { session, lab, view, onClose, onView } = props;
+  const back = backTarget(view);
+  const scientist = view.kind === 'scientist' ? lab.scientists.find((candidate) => candidate.id === view.scientistId) : undefined;
+  const trail = [session.title ? preview(session.title, 32) : session.project, `Lab ${lab.index}`];
+  if (view.kind === 'changes') trail.push('Changes');
+  if (scientist) trail.push(roleLabel(scientist.role));
   return (
     <aside className="panel" aria-label={`Lab ${lab.index} details`}>
       <header className="panel__header">
-        <div>
-          <h2 className="panel__title">Lab {lab.index}</h2>
-          <p className="panel__meta">
-            {session.title || session.project}, started {timeAgo(lab.startedAt, props.now)}, {agentCount(lab.scientists)}
-          </p>
-        </div>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close panel">
-          ×
+        {back && (
+          <button type="button" className="icon-button" onClick={() => onView(back.view)} aria-label={back.label} title={back.label}>
+            <Icon name="back" />
+          </button>
+        )}
+        <nav className="breadcrumb" aria-label="Breadcrumb">
+          <ol>
+            {trail.map((step, index) => (
+              <li key={index} aria-current={index === trail.length - 1 ? 'page' : undefined}>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close panel" title="Close (Esc)">
+          <Icon name="close" />
         </button>
       </header>
       <div className="panel__body">
@@ -63,6 +78,17 @@ function LabView({ session, lab, detail, now, onView, access }: InspectPanelProp
   const prompt = detail?.prompt ?? lab.prompt;
   return (
     <>
+      <h2 className="panel__title">Lab {lab.index}</h2>
+      <dl className="facts">
+        <dt>Session</dt>
+        <dd>{session.title || session.project}</dd>
+        <dt>Project</dt>
+        <dd className="mono">{session.project}</dd>
+        <dt>Started</dt>
+        <dd>{timeAgo(lab.startedAt, now)}</dd>
+        <dt>Agents</dt>
+        <dd>{agentCount(lab.scientists)}</dd>
+      </dl>
       <section className="section">
         <h3 className="section__title">Prompt</h3>
         <blockquote className="prompt">{prompt || 'This prompt had no text.'}</blockquote>
@@ -72,7 +98,7 @@ function LabView({ session, lab, detail, now, onView, access }: InspectPanelProp
         <ExplainButton access={access} sessionId={session.sessionId} labId={lab.id} label="Ask the session what this lab did" />
       </section>
       <section className="section">
-        <h3 className="section__title">Scientists</h3>
+        <h3 className="section__title">Agents</h3>
         <ul className="list">
           {lab.scientists.map((scientist) => (
             <li key={scientist.id}>
@@ -84,9 +110,13 @@ function LabView({ session, lab, detail, now, onView, access }: InspectPanelProp
       <section className="section">
         <h3 className="section__title">Changes</h3>
         {lab.changeCount ? (
-          <button type="button" className="row" onClick={() => onView({ kind: 'changes', changeIndex: null })}>
-            <span className="row__main">{lab.changeCount === 1 ? '1 file change' : `${lab.changeCount} file changes`}</span>
+          <button type="button" className="row row--link" onClick={() => onView({ kind: 'changes', changeIndex: null })}>
+            <span className="row__main">
+              <Icon name="file" />
+              {lab.changeCount === 1 ? '1 file change' : `${lab.changeCount} file changes`}
+            </span>
             <span className="row__sub">Open the changes board</span>
+            <Icon name="chevron" className="row__chevron" />
           </button>
         ) : (
           <p className="muted">No files changed in this lab.</p>
@@ -102,27 +132,20 @@ function LabView({ session, lab, detail, now, onView, access }: InspectPanelProp
  * @returns view
  */
 function ChangesView({ lab, detail, onView, changeIndex }: InspectPanelProps & { changeIndex: number | null }): ReactElement {
-  const back = (
-    <button type="button" className="text-button" onClick={() => onView(changeIndex === null ? { kind: 'lab' } : { kind: 'changes', changeIndex: null })}>
-      {changeIndex === null ? 'Back to lab' : 'Back to changes'}
-    </button>
-  );
-  if (!detail) return <Loading>{back}</Loading>;
+  if (!detail) return <Loading />;
   const picked = changeIndex === null ? undefined : detail.changes[changeIndex];
   if (picked) {
     return (
       <section className="section">
-        {back}
-        <h3 className="section__title section__title--file">{baseName(picked.file)}</h3>
-        <p className="muted break">{picked.file}</p>
+        <h2 className="panel__title mono">{baseName(picked.file)}</h2>
+        <p className="muted break mono">{picked.file}</p>
         <DiffView change={picked} />
       </section>
     );
   }
   return (
     <section className="section">
-      {back}
-      <h3 className="section__title">Changes board</h3>
+      <h2 className="panel__title">Changes board</h2>
       <ul className="list">
         {[...detail.changes.entries()].reverse().map(([index, change]) => (
           <li key={`${change.toolUseId}-${index}`}>
@@ -139,28 +162,28 @@ function ChangesView({ lab, detail, onView, changeIndex }: InspectPanelProps & {
  * @param props - panel props plus the scientist id
  * @returns view
  */
-function ScientistView({ session, lab, detail, now, onView, scientistId, access }: InspectPanelProps & { scientistId: string }): ReactElement {
+function ScientistView({ session, lab, detail, now, scientistId, access }: InspectPanelProps & { scientistId: string }): ReactElement {
   const summary = lab.scientists.find((scientist) => scientist.id === scientistId);
   const full: Scientist | undefined = detail?.scientists[scientistId];
-  const back = (
-    <button type="button" className="text-button" onClick={() => onView({ kind: 'lab' })}>
-      Back to lab
-    </button>
-  );
-  if (!summary) return <p className="muted">This scientist has left the lab.</p>;
+  if (!summary) return <p className="muted">This agent has left the lab.</p>;
   const waiting = isWaiting(summary, now);
   return (
     <>
-      <section className="section">
-        {back}
-        <h3 className="scientist-name">{roleLabel(summary.role)}</h3>
-        {summary.description && <p className="muted">{summary.description}</p>}
-        <p className="status-line">
-          <span className="dot" style={{ background: STATUS_COLORS[summary.status] }} />
-          {statusLabel(summary.status, waiting)}
-          {summary.current ? `: ${summary.current.summary}` : ''}
-        </p>
-      </section>
+      <h2 className="panel__title">{roleLabel(summary.role)}</h2>
+      {summary.description && <p className="muted">{summary.description}</p>}
+      <p className="status-line">
+        <span className="dot" style={{ background: STATUS_COLORS[summary.status] }} />
+        {statusLabel(summary.status, waiting)}
+        {summary.current ? `: ${summary.current.summary}` : ''}
+      </p>
+      <dl className="facts">
+        <dt>Model</dt>
+        <dd>{modelLabel(summary.model) || 'Unknown'}</dd>
+        <dt>Effort</dt>
+        <dd>{effortLabel(summary.effort) || 'Unknown'}</dd>
+        <dt>Edits</dt>
+        <dd className="num">{summary.changeCount}</dd>
+      </dl>
       <section className="section">
         <h3 className="section__title">What this agent did</h3>
         <ExplainButton access={access} sessionId={session.sessionId} labId={lab.id} scientistId={scientistId} label="Ask the session what this agent did" />
@@ -176,15 +199,26 @@ function ScientistView({ session, lab, detail, now, onView, scientistId, access 
           <section className="section">
             <h3 className="section__title">Activity</h3>
             {full.actions.length ? (
-              <ol className="feed" reversed>
-                {[...full.actions].reverse().map((action) => (
-                  <li key={action.toolUseId} className={`feed__item feed__item--${action.state}`}>
-                    <span className="feed__tool">{action.tool}</span>
-                    <span className="feed__summary">{action.summary}</span>
-                    <span className="feed__time">{timeAgo(action.at, now)}</span>
-                  </li>
-                ))}
-              </ol>
+              <table className="activity">
+                <thead>
+                  <tr>
+                    <th scope="col">Tool</th>
+                    <th scope="col">Action</th>
+                    <th scope="col" className="activity__when">
+                      When
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...full.actions].reverse().map((action) => (
+                    <tr key={action.toolUseId} className={`activity__row activity__row--${action.state}`}>
+                      <td className="activity__tool">{action.tool}</td>
+                      <td className="activity__summary">{action.summary}</td>
+                      <td className="activity__when">{timeAgo(action.at, now)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <p className="muted">No tool calls yet.</p>
             )}
@@ -217,6 +251,7 @@ function ScientistRow({ scientist, now, onClick }: { scientist: ScientistSummary
         {statusLabel(scientist.status, waiting)}
         {scientist.current ? `: ${preview(scientist.current.summary, 50)}` : ''}
       </span>
+      <span className="row__model">{modelEffort(scientist)}</span>
     </button>
   );
 }
@@ -229,7 +264,7 @@ function ScientistRow({ scientist, now, onClick }: { scientist: ScientistSummary
 function ChangeRow({ change, by, onClick }: { change: ChangeEntry; by: ScientistSummary | undefined; onClick: () => void }): ReactElement {
   return (
     <button type="button" className="row" onClick={onClick}>
-      <span className="row__main">{baseName(change.file)}</span>
+      <span className="row__main mono">{baseName(change.file)}</span>
       <span className="row__sub">
         {change.op === 'write' ? 'Wrote file' : 'Edited'} by {by ? roleLabel(by.role) : 'a scientist'}
       </span>
@@ -242,11 +277,30 @@ function ChangeRow({ change, by, onClick }: { change: ChangeEntry; by: Scientist
  * @param props - optional content shown above the message
  * @returns loading note
  */
-function Loading({ children }: { children?: ReactNode }): ReactElement {
+function Loading(): ReactElement {
   return (
     <section className="section">
-      {children}
       <p className="muted">Loading lab notes…</p>
     </section>
   );
+}
+
+/**
+ * Where the header's back button goes from a view, and its name.
+ * @param view - the current view
+ * @returns the view to go back to and the button name, or null on the lab overview
+ */
+function backTarget(view: PanelView): { view: PanelView; label: string } | null {
+  if (view.kind === 'lab') return null;
+  if (view.kind === 'changes' && view.changeIndex !== null) return { view: { kind: 'changes', changeIndex: null }, label: 'Back to changes' };
+  return { view: { kind: 'lab' }, label: 'Back to lab' };
+}
+
+/**
+ * An agent's model and effort, for example "Opus 5.5 · High".
+ * @param scientist - the agent
+ * @returns the label, empty when neither is known
+ */
+function modelEffort(scientist: ScientistSummary): string {
+  return [modelLabel(scientist.model), effortLabel(scientist.effort)].filter(Boolean).join(' · ');
 }

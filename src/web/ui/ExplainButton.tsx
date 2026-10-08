@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { sendControl, type ControlAccess } from '../state/control';
+import { Icon } from './icons';
 
 /** Props for asking a session about a lab's or an agent's work. */
 interface ExplainButtonProps {
@@ -33,6 +34,7 @@ export function ExplainButton({ access, sessionId, labId, scientistId, label }: 
   return (
     <div className="explain">
       <button type="button" className="button" onClick={() => void ask()} disabled={state.kind === 'asking'}>
+        <Icon name="sparkle" />
         {state.kind === 'asking' ? 'Asking the session…' : label}
       </button>
       {state.kind === 'asking' && <p className="muted">This reads the whole session again, so it can take a minute or two. It uses your Claude usage.</p>}

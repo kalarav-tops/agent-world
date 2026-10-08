@@ -210,7 +210,7 @@ End-to-end tests need Chromium: run `npx playwright install chromium`, or set `P
 ## Credits
 
 - 3D models: [Kenney](https://www.kenney.nl) Mini Characters, Furniture Kit and Nature Kit, all [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Their licence files sit next to the models in `src/web/public/models`.
-- Fonts: [Atkinson Hyperlegible Next](https://fontsource.org/fonts/atkinson-hyperlegible-next) and [Newsreader](https://fontsource.org/fonts/newsreader), via Fontsource, under the SIL Open Font License.
+- Font: [Atkinson Hyperlegible Next](https://fontsource.org/fonts/atkinson-hyperlegible-next), via Fontsource, under the SIL Open Font License.
 - Built on [three.js](https://threejs.org), [React Three Fiber](https://r3f.docs.pmnd.rs) and [drei](https://drei.docs.pmnd.rs).
 
 Agent World is an independent project and isn't affiliated with or endorsed by Anthropic.

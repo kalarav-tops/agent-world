@@ -36,7 +36,7 @@ export function DiffView({ change }: { change: ChangeEntry }): ReactElement {
         ))}
       </pre>
       {!showAll && result.lines.length > VISIBLE_LINES && (
-        <button type="button" className="text-button" onClick={() => setShowAll(true)}>
+        <button type="button" className="button button--quiet" onClick={() => setShowAll(true)}>
           Show all {result.lines.length} lines
         </button>
       )}
